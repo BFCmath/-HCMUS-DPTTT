@@ -1,1 +1,44 @@
 # -HCMUS-DPTTT
+
+## Exact greedy baseline
+
+The baseline implementation of the Basic Exact Greedy Algorithm from the
+XGBoost paper lives in `src/dpt_xgboost_baseline/exact_greedy.py`.
+
+The main API is:
+
+- `exact_greedy_split(features, gradients, hessians, instance_indices=None, config=None)`
+- `split_gain(...)`
+- `leaf_weight(...)`
+
+`features` is a dense row-major matrix. Missing or non-finite values are
+rejected because this baseline implements the dense exact split finder from
+Algorithm 1, not the later sparsity-aware algorithm.
+
+Run tests with:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[test]'
+.venv/bin/python -m pytest -q
+```
+
+## arXiv MCP reader
+
+This workspace includes a local stdio MCP server for reading arXiv papers:
+
+```bash
+codex mcp add arxiv-reader -- /home/bfc/dpt/arxiv_mcp_server.py
+```
+
+The server exposes:
+
+- `read_arxiv_paper`: fetches an arXiv URL or id, for example `1603.02754`, and returns readable text.
+- `get_arxiv_metadata`: fetches title, authors, dates, PDF URL, and abstract.
+- `arxiv://{id}` resource template, for example `arxiv://1603.02754`.
+
+Remove it with:
+
+```bash
+codex mcp remove arxiv-reader
+```
