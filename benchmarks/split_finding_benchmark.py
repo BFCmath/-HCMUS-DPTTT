@@ -95,7 +95,7 @@ def gain_or_none(result: object) -> float | None:
 
 
 def run_suite(
-    sizes: tuple[int, ...] = (500, 1000, 2000),
+    sizes: tuple[int, ...] = (500, 1000, 2000, 5000, 10000),
     features: int = 8,
     repeats: int = 5,
     eps: float = 0.05,
