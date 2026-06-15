@@ -1,0 +1,110 @@
+\section{Ensemble Learning}
+
+\subsection{Ý tưởng tổng quát}
+
+Ensemble Learning, hay học tổ hợp, là nhóm phương pháp kết hợp nhiều mô hình cơ sở để tạo ra một mô hình tổng hợp mạnh hơn. Thay vì chỉ dựa vào một mô hình đơn lẻ, ensemble huấn luyện nhiều mô hình yếu hoặc mô hình cơ sở, sau đó kết hợp dự đoán của chúng để đưa ra kết quả cuối cùng.
+
+Một mô hình yếu là mô hình có khả năng dự đoán tốt hơn ngẫu nhiên nhưng chưa đủ mạnh nếu sử dụng riêng lẻ. Trực giác của ensemble là nếu các mô hình thành phần mắc lỗi theo những cách khác nhau, việc kết hợp chúng có thể giúp giảm lỗi tổng thể và cải thiện khả năng khái quát hóa.
+
+Với bài toán phân loại, kết quả cuối cùng thường được lấy bằng voting:
+
+\[
+\hat{y} = \mathrm{majority\_vote}(f_1(x), f_2(x), \ldots, f_K(x)).
+\]
+
+Với bài toán hồi quy, kết quả cuối cùng có thể là trung bình hoặc tổng có trọng số của các mô hình thành phần:
+
+\[
+\hat{y} = \frac{1}{K}\sum_{k=1}^{K} f_k(x).
+\]
+
+Riêng trong các mô hình Boosting, các mô hình thành phần thường được cộng dồn tuần tự:
+
+\[
+\hat{y} = \sum_{k=1}^{K} f_k(x).
+\]
+
+Cách biểu diễn này là nền tảng cho Gradient Boosting và XGBoost, trong đó mỗi cây mới được thêm vào nhằm cải thiện mô hình hiện tại.
+
+\subsection{Bagging}
+
+Bagging, viết tắt của Bootstrap Aggregating, là một kỹ thuật ensemble trong đó nhiều mô hình được huấn luyện độc lập trên các tập dữ liệu con được lấy mẫu lại từ tập dữ liệu ban đầu \cite{breiman1996bagging}.
+
+Quy trình tổng quát của Bagging gồm:
+
+\begin{enumerate}
+    \item Tạo nhiều tập dữ liệu con bằng cách lấy mẫu có hoàn lại từ tập train.
+    \item Huấn luyện một mô hình riêng trên mỗi tập dữ liệu con.
+    \item Kết hợp dự đoán của các mô hình bằng voting hoặc averaging.
+\end{enumerate}
+
+Random Forest là một ví dụ tiêu biểu của Bagging với cây quyết định. Mỗi cây được huấn luyện trên một tập mẫu khác nhau và thường chỉ xét một tập con các đặc trưng tại mỗi split. Cơ chế này giúp các cây trong ensemble đa dạng hơn.
+
+Ưu điểm chính của Bagging là giảm variance. Nếu một cây quyết định đơn lẻ dễ bị overfitting do quá nhạy với dữ liệu huấn luyện, thì việc trung bình hóa nhiều cây có thể giúp mô hình ổn định hơn.
+
+\subsection{Boosting}
+
+Boosting là một kỹ thuật ensemble trong đó các mô hình được huấn luyện tuần tự. Khác với Bagging, các mô hình trong Boosting không độc lập với nhau. Mô hình sau được xây dựng dựa trên lỗi hoặc tín hiệu tối ưu còn lại của mô hình trước.
+
+Ý tưởng tổng quát có thể viết dưới dạng mô hình cộng dồn:
+
+\[
+F_K(x) = f_1(x) + f_2(x) + \cdots + f_K(x),
+\]
+
+trong đó $f_k$ là mô hình yếu thứ $k$.
+
+Trong Boosting, mỗi mô hình mới không cố gắng giải quyết toàn bộ bài toán từ đầu. Thay vào đó, nó tập trung cải thiện phần mà mô hình hiện tại chưa dự đoán tốt. Vì vậy, Boosting thường có khả năng giảm bias tốt và tạo ra mô hình dự đoán mạnh từ nhiều mô hình yếu.
+
+Gradient Boosting là một dạng Boosting quan trọng, trong đó mô hình mới được học theo hướng làm giảm hàm mất mát bằng gradient \cite{friedman2001gradient}. XGBoost tiếp tục mở rộng hướng tiếp cận này bằng cách bổ sung regularization, đạo hàm bậc hai và nhiều tối ưu thuật toán \cite{chen2016xgboost}.
+
+Một số mô hình Boosting phổ biến gồm AdaBoost, Gradient Boosting, XGBoost, LightGBM và CatBoost.
+
+\subsection{So sánh Bagging và Boosting}
+
+\begin{table}[htbp]
+    \centering
+    \caption{So sánh Bagging và Boosting}
+    \label{tab:bagging_boosting}
+    \begin{tabular}{p{3.2cm}p{6.0cm}p{6.0cm}}
+        \toprule
+        \textbf{Tiêu chí} & \textbf{Bagging} & \textbf{Boosting} \\
+        \midrule
+        Cách huấn luyện 
+        & Các mô hình được huấn luyện song song và tương đối độc lập 
+        & Các mô hình được huấn luyện tuần tự, mô hình sau phụ thuộc vào mô hình trước \\
+
+        Mục tiêu chính 
+        & Giảm variance và tăng độ ổn định 
+        & Giảm bias và tối ưu lỗi dự đoán \\
+
+        Ví dụ tiêu biểu 
+        & Random Forest 
+        & Gradient Boosting, XGBoost \\
+
+        Cách kết hợp 
+        & Voting hoặc averaging 
+        & Cộng dồn tuần tự, thường có trọng số hoặc learning rate \\
+
+        Rủi ro chính 
+        & Có thể cần nhiều mô hình để đạt hiệu quả cao 
+        & Có thể overfit nếu số vòng boosting lớn hoặc regularization chưa phù hợp \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Vì sao Boosting phù hợp với Decision Tree}
+
+Cây quyết định là một base learner phù hợp cho Boosting vì cây nông có thể đóng vai trò như một mô hình yếu. Một cây nông riêng lẻ có thể chưa đủ mạnh, nhưng khi nhiều cây được cộng dồn tuần tự, mô hình tổng hợp có thể biểu diễn các quan hệ phức tạp hơn.
+
+Ngoài ra, cây quyết định có khả năng mô hình hóa quan hệ phi tuyến và tương tác giữa các đặc trưng. Đây là đặc điểm quan trọng trong dữ liệu dạng bảng, nơi các đặc trưng thường không tác động độc lập đến nhãn.
+
+Trong Gradient Boosting và XGBoost, mỗi cây thường không cần quá sâu. Thay vào đó, mô hình dùng nhiều cây để dần dần cải thiện dự đoán. Cây sau tập trung vào phần lỗi hoặc hướng gradient mà các cây trước chưa xử lý tốt. Điều này giúp Boosting với Decision Tree đạt hiệu quả cao trong nhiều bài toán thực tế.
+
+\subsection{Ưu điểm và hạn chế}
+
+Ensemble Learning có nhiều ưu điểm. Thứ nhất, việc kết hợp nhiều mô hình có thể giúp tăng độ chính xác so với một mô hình đơn lẻ. Thứ hai, ensemble có thể cải thiện khả năng khái quát hóa nếu các mô hình thành phần đủ đa dạng. Thứ ba, các mô hình như Gradient Boosted Decision Trees có khả năng mô hình hóa quan hệ phi tuyến mạnh mẽ trong dữ liệu.
+
+Tuy nhiên, ensemble cũng có một số hạn chế. Chi phí huấn luyện thường cao hơn vì phải học nhiều mô hình. Mô hình tổng hợp cũng khó diễn giải hơn so với một cây quyết định đơn lẻ. Riêng với Boosting, quá trình huấn luyện có tính tuần tự nên khó song song hóa hoàn toàn hơn Bagging.
+
+XGBoost được thiết kế để giữ lại sức mạnh của Gradient Boosting, đồng thời tối ưu mạnh quá trình huấn luyện để có thể mở rộng trên dữ liệu lớn. Đây là lý do các phần sau sẽ tập trung vào cách XGBoost xây dựng cây và tìm split một cách hiệu quả.

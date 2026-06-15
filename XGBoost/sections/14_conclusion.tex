@@ -1,0 +1,39 @@
+\section{Conclusion}
+
+\subsection{Tổng kết}
+
+Báo cáo đã trình bày quá trình phát triển từ cây quyết định (Decision Tree) đến các phương pháp học tổ hợp (Ensemble Learning), Gradient Boosting và cuối cùng là XGBoost.
+
+Trước hết, báo cáo giới thiệu cây quyết định như một mô hình học máy có khả năng mô hình hóa các quan hệ phi tuyến và dễ diễn giải. Tuy nhiên, một cây đơn lẻ thường có độ chính xác hạn chế và dễ bị overfitting. Để khắc phục nhược điểm này, các phương pháp Ensemble Learning được đề xuất nhằm kết hợp nhiều mô hình yếu để tạo thành một mô hình mạnh hơn.
+
+Tiếp theo, báo cáo trình bày Gradient Boosting, trong đó các cây được xây dựng tuần tự để giảm dần sai số dự đoán thông qua thông tin gradient của hàm mất mát. Trên nền tảng đó, XGBoost mở rộng Gradient Boosting bằng cách bổ sung regularization, khai triển Taylor bậc hai và nhiều tối ưu hóa ở mức thuật toán cũng như hệ thống.
+
+Trọng tâm của báo cáo là phân tích các kỹ thuật tìm split trong XGBoost, bao gồm Exact Greedy Split, Column Block Structure, Approximate Split Finding, Weighted Quantile Sketch và Sparsity-aware Split Finding. Các kỹ thuật này tạo nên nền tảng giúp XGBoost đạt được hiệu năng cao trong thực tế.
+
+\subsection{Nhận xét về độ phức tạp}
+
+Từ góc nhìn của môn Nhập môn Phân tích độ phức tạp thuật toán, chi phí xây dựng cây chủ yếu đến từ quá trình tìm split. Nếu sử dụng phương pháp Exact Greedy Split, thuật toán phải xét một số lượng lớn candidate split, dẫn đến chi phí tính toán đáng kể khi dữ liệu có nhiều mẫu hoặc nhiều thuộc tính.
+
+Các cải tiến của XGBoost đều hướng đến mục tiêu giảm chi phí này:
+
+\begin{itemize}
+    \item Column Block Structure loại bỏ việc sắp xếp lặp lại dữ liệu.
+    \item Approximate Split Finding giảm số lượng candidate split cần xét.
+    \item Weighted Quantile Sketch giúp lựa chọn candidate chất lượng hơn dựa trên thông tin Hessian.
+    \item Sparsity-aware Split Finding tận dụng đặc tính sparse của dữ liệu và xử lý missing value hiệu quả.
+\end{itemize}
+
+Nhờ sự kết hợp của các kỹ thuật trên, XGBoost có khả năng mở rộng tốt trên các tập dữ liệu lớn trong khi vẫn duy trì chất lượng dự đoán cao.
+
+\subsection{Hướng phát triển}
+
+Trong tương lai, có thể mở rộng công việc theo một số hướng sau:
+
+\begin{itemize}
+    \item Triển khai đầy đủ các thuật toán và thực hiện thực nghiệm trên các bộ dữ liệu thực tế có quy mô lớn hơn.
+    \item Nghiên cứu ảnh hưởng của các siêu tham số như \texttt{max\_depth}, \texttt{min\_child\_weight}, \texttt{gamma} và \texttt{learning\_rate} đến hiệu năng của XGBoost.
+    \item So sánh XGBoost với các thư viện Gradient Boosting hiện đại khác như LightGBM và CatBoost dưới góc nhìn độ phức tạp và hiệu năng thực nghiệm.
+    \item Tìm hiểu sâu hơn các tối ưu hóa ở mức hệ thống như cache-aware access, compression và distributed training trong XGBoost.
+\end{itemize}
+
+Qua quá trình tìm hiểu, có thể thấy rằng thành công của XGBoost không chỉ đến từ mô hình Gradient Boosting mà còn đến từ việc thiết kế các thuật toán và cấu trúc dữ liệu hiệu quả, giúp giảm đáng kể chi phí tính toán trong quá trình huấn luyện.

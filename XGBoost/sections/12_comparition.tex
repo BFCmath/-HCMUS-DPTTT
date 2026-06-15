@@ -1,0 +1,130 @@
+\section{Comparison}
+
+\subsection{So sánh ý tưởng}
+
+Các kỹ thuật được trình bày trong báo cáo không phải là những thuật toán độc lập hoàn toàn, mà là các bước cải tiến dần dần xoay quanh bài toán trung tâm: \textit{tìm split hiệu quả trong quá trình xây dựng cây}. Bảng~\ref{tab:comparison_idea} tóm tắt mục tiêu và ý tưởng của từng kỹ thuật.
+
+\begin{table}[htbp]
+    \centering
+    \caption{So sánh ý tưởng các kỹ thuật tìm split trong XGBoost}
+    \label{tab:comparison_idea}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{p{2.5cm}p{3cm}p{3.5cm}p{3cm}p{2.5cm}}
+        \toprule
+        \textbf{Thuật toán} &
+        \textbf{Vấn đề giải quyết} &
+        \textbf{Ý tưởng chính} &
+        \textbf{Ưu điểm} &
+        \textbf{Nhược điểm} \\
+        \midrule
+
+        Exact Greedy &
+        Tìm split tối ưu &
+        Duyệt gần như toàn bộ candidate split &
+        Chính xác nhất &
+        Chi phí tính toán cao \\
+
+        Column Block &
+        Sort lặp lại nhiều lần &
+        Sắp xếp dữ liệu theo cột một lần và tái sử dụng &
+        Giảm chi phí sort &
+        Tăng chi phí lưu trữ \\
+
+        Approximate Split Finding &
+        Quá nhiều candidate split &
+        Chỉ xét một tập candidate đại diện &
+        Mở rộng tốt trên dữ liệu lớn &
+        Có sai số xấp xỉ \\
+
+        Weighted Quantile Sketch &
+        Candidate chưa phản ánh đúng objective &
+        Sinh candidate dựa trên quantile có trọng số Hessian &
+        Candidate chất lượng hơn &
+        Thuật toán phức tạp hơn \\
+
+        Sparsity-aware Split Finding &
+        Dữ liệu sparse và missing value &
+        Chỉ scan các giá trị non-missing và học default direction &
+        Rất hiệu quả trên dữ liệu thưa &
+        Cần xử lý thêm default direction \\
+
+        \bottomrule
+    \end{tabular}}
+\end{table}
+
+Có thể thấy mỗi kỹ thuật giải quyết một nút thắt khác nhau của quá trình split finding. Exact Greedy Split là thuật toán nền tảng; các kỹ thuật còn lại lần lượt cải thiện hiệu năng bằng cách giảm số lần sắp xếp, giảm số candidate cần xét hoặc tận dụng cấu trúc sparse của dữ liệu.
+
+\subsection{So sánh độ phức tạp}
+
+Từ góc nhìn của môn Phân tích độ phức tạp thuật toán, điểm đáng quan tâm nhất là sự thay đổi về chi phí tính toán khi áp dụng các kỹ thuật tối ưu.
+
+\begin{table}[htbp]
+    \centering
+    \caption{So sánh độ phức tạp các kỹ thuật}
+    \label{tab:comparison_complexity}
+    \begin{tabular}{p{4cm}p{8cm}}
+        \toprule
+        \textbf{Thuật toán} &
+        \textbf{Độ phức tạp đặc trưng} \\
+        \midrule
+
+        Exact Greedy Split &
+        $O(Khdn\log n)$ nếu sort lại ở mỗi node; $O(Khdn)$ chỉ tính phần scan sau khi đã có thứ tự \\
+
+        Column Block Structure &
+        Tiền xử lý $O(dn\log n)$, sau đó scan split với chi phí gần $O(Khdn)$ \\
+
+        Approximate Split Finding &
+        Lý tưởng: $O(Khdq)$ với $q \ll n$; code minh họa Python gần hơn với $O(Khdqn)$ do chia lại dữ liệu cho từng candidate \\
+
+        Weighted Quantile Sketch &
+        Paper: summary phụ thuộc $\epsilon$; code minh họa sinh candidate trực tiếp bằng aggregate Hessian và sort giá trị feature \\
+
+        Sparsity-aware Split Finding &
+        Scan sau khi có thứ tự: $O(Kh|x|_0)$; code minh họa vẫn có chi phí sort non-missing tại node \\
+
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Trong bảng trên:
+
+\begin{itemize}
+    \item $K$ là số cây trong mô hình.
+    \item $h$ là độ sâu tối đa của mỗi cây.
+    \item $d$ là số thuộc tính.
+    \item $n$ là số mẫu.
+    \item $q$ là số candidate split sau khi xấp xỉ.
+    \item $|x|_0$ là số phần tử non-missing hoặc non-zero.
+    \item $\epsilon$ là sai số cho phép của sketch.
+\end{itemize}
+
+Mặc dù các biểu thức trên chỉ là các ước lượng ở mức cao, chúng cho thấy rõ xu hướng chung: các cải tiến của XGBoost đều nhằm giảm số lượng phép tính cần thực hiện trong quá trình tìm split.
+
+\subsection{Thảo luận}
+
+Nếu xem quá trình phát triển ý tưởng split finding trong báo cáo như một chuỗi cải tiến, có thể tóm tắt như sau:
+
+\begin{center}
+Exact Greedy
+$\rightarrow$
+Column Block
+$\rightarrow$
+Approximate Split Finding
+$\rightarrow$
+Weighted Quantile Sketch
+$\rightarrow$
+Sparsity-aware Split Finding
+\end{center}
+
+Sơ đồ này là cách tổ chức nội dung báo cáo, không có nghĩa các kỹ thuật luôn thay thế nhau theo thứ tự tuyến tính trong mọi cài đặt. Mỗi kỹ thuật giải quyết một hạn chế khác nhau:
+
+\begin{itemize}
+    \item Exact Greedy Split chính xác nhưng quá tốn thời gian.
+    \item Column Block Structure loại bỏ việc sắp xếp lặp lại.
+    \item Approximate Split Finding giảm số lượng candidate cần xét.
+    \item Weighted Quantile Sketch giúp các candidate được chọn có chất lượng cao hơn.
+    \item Sparsity-aware Split Finding tận dụng đặc tính sparse của dữ liệu để giảm thêm chi phí tính toán.
+\end{itemize}
+
+Từ góc nhìn độ phức tạp thuật toán, đóng góp quan trọng nhất của XGBoost không nằm ở việc thay đổi mô hình Gradient Boosting, mà nằm ở việc thiết kế các cấu trúc dữ liệu và thuật toán giúp quá trình tìm split trở nên hiệu quả hơn. Chính những cải tiến này giúp XGBoost có khả năng mở rộng tốt trên các tập dữ liệu lớn trong khi vẫn duy trì chất lượng dự đoán cao.

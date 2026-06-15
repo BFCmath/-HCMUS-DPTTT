@@ -1,0 +1,327 @@
+\section{Mathematical Formulation of XGBoost}
+
+\subsection{Mô hình cộng dồn}
+
+Giả sử tập dữ liệu huấn luyện gồm $n$ mẫu và $d$ đặc trưng:
+
+\[
+D = \{(x_i, y_i)\}_{i=1}^{n},
+\quad x_i \in \mathbb{R}^{d}.
+\]
+
+XGBoost sử dụng mô hình dạng cộng dồn của nhiều cây hồi quy. Dự đoán của mô hình tại mẫu $i$ được viết là \cite{chen2016xgboost}:
+
+\[
+\hat{y}_i = \phi(x_i) = \sum_{k=1}^{K} f_k(x_i),
+\quad f_k \in \mathcal{F}.
+\]
+
+Trong đó:
+
+\begin{itemize}
+    \item $K$ là số cây trong mô hình.
+    \item $f_k$ là cây thứ $k$.
+    \item $\mathcal{F}$ là không gian các cây hồi quy.
+\end{itemize}
+
+Mỗi cây hồi quy được biểu diễn bởi:
+
+\[
+f(x) = w_{q(x)}.
+\]
+
+Ở đây:
+
+\begin{itemize}
+    \item $q(x)$ ánh xạ một mẫu $x$ đến chỉ số của leaf tương ứng.
+    \item $w$ là vector trọng số của các leaf.
+    \item Nếu cây có $T$ leaf thì $w \in \mathbb{R}^{T}$.
+\end{itemize}
+
+Khác với cây quyết định phân loại truyền thống, mỗi leaf trong XGBoost chứa một giá trị số thực. Dự đoán cuối cùng của mô hình là tổng các giá trị leaf mà mẫu rơi vào qua tất cả các cây.
+
+\subsection{Hàm mục tiêu}
+
+XGBoost tối ưu một hàm mục tiêu gồm hai phần:
+
+\begin{itemize}
+    \item Loss dự đoán.
+    \item Regularization đo độ phức tạp của cây.
+\end{itemize}
+
+Hàm mục tiêu tổng quát là:
+
+\[
+\mathcal{L}(\phi)
+=
+\sum_{i=1}^{n} l(y_i, \hat{y}_i)
++
+\sum_{k=1}^{K} \Omega(f_k).
+\]
+
+Trong đó:
+
+\begin{itemize}
+    \item $l(y_i, \hat{y}_i)$ là hàm mất mát đo sai số dự đoán.
+    \item $\Omega(f_k)$ là thành phần regularization cho cây thứ $k$.
+\end{itemize}
+
+Regularization của một cây được định nghĩa là:
+
+\[
+\Omega(f) = \gamma T + \frac{1}{2}\lambda \|w\|^2.
+\]
+
+Trong đó:
+
+\begin{itemize}
+    \item $T$ là số leaf của cây.
+    \item $\gamma$ là hệ số phạt cho mỗi leaf.
+    \item $\lambda$ là hệ số phạt độ lớn của leaf weight.
+    \item $w$ là vector trọng số của các leaf.
+\end{itemize}
+
+Ý nghĩa của regularization là kiểm soát độ phức tạp của cây. Nếu cây có quá nhiều leaf hoặc leaf weight quá lớn, giá trị regularization tăng lên. Nhờ đó, XGBoost có xu hướng chọn các cây đơn giản hơn và giảm nguy cơ overfitting.
+
+\subsection{Huấn luyện theo kiểu cộng dồn}
+
+XGBoost huấn luyện mô hình theo từng vòng lặp. Tại vòng lặp thứ $t$, mô hình hiện tại là:
+
+\[
+\hat{y}_i^{(t-1)}.
+\]
+
+Ta thêm một cây mới $f_t$ để tạo dự đoán mới:
+
+\[
+\hat{y}_i^{(t)}
+=
+\hat{y}_i^{(t-1)} + f_t(x_i).
+\]
+
+Khi đó, hàm mục tiêu tại vòng lặp thứ $t$ là:
+
+\[
+\mathcal{L}^{(t)}
+=
+\sum_{i=1}^{n}
+l\left(y_i, \hat{y}_i^{(t-1)} + f_t(x_i)\right)
++
+\Omega(f_t).
+\]
+
+Vì các cây trước đã cố định, mục tiêu ở vòng lặp thứ $t$ là tìm cây mới $f_t$ sao cho hàm mục tiêu giảm nhiều nhất. Đây chính là cách XGBoost kế thừa ý tưởng học tuần tự của Gradient Boosting.
+
+\subsection{Khai triển Taylor bậc hai}
+
+Để tối ưu hàm mục tiêu tại mỗi vòng lặp, XGBoost dùng khai triển Taylor bậc hai quanh dự đoán hiện tại $\hat{y}_i^{(t-1)}$:
+
+\[
+l\left(y_i, \hat{y}_i^{(t-1)} + f_t(x_i)\right)
+\approx
+l\left(y_i, \hat{y}_i^{(t-1)}\right)
++
+g_i f_t(x_i)
++
+\frac{1}{2} h_i f_t^2(x_i).
+\]
+
+Trong đó:
+
+\[
+g_i =
+\frac{\partial l(y_i, \hat{y}_i^{(t-1)})}
+{\partial \hat{y}_i^{(t-1)}},
+\]
+
+\[
+h_i =
+\frac{\partial^2 l(y_i, \hat{y}_i^{(t-1)})}
+{\partial (\hat{y}_i^{(t-1)})^2}.
+\]
+
+Ở đây:
+
+\begin{itemize}
+    \item $g_i$ là gradient bậc nhất của loss tại mẫu $i$.
+    \item $h_i$ là Hessian, tức đạo hàm bậc hai của loss tại mẫu $i$.
+\end{itemize}
+
+Bỏ qua hằng số không phụ thuộc vào $f_t$, ta thu được objective xấp xỉ:
+
+\[
+\tilde{\mathcal{L}}^{(t)}
+=
+\sum_{i=1}^{n}
+\left[
+g_i f_t(x_i)
++
+\frac{1}{2}h_i f_t^2(x_i)
+\right]
++
+\Omega(f_t).
+\]
+
+Công thức này là điểm khác biệt quan trọng giữa XGBoost và nhiều cách trình bày Gradient Boosting cơ bản: XGBoost không chỉ dùng gradient bậc nhất mà còn dùng Hessian để có xấp xỉ tốt hơn cho hàm mục tiêu.
+
+\subsection{Tối ưu trọng số leaf}
+
+Giả sử cấu trúc cây $q$ đã cố định. Gọi $I_j$ là tập các mẫu rơi vào leaf thứ $j$:
+
+\[
+I_j = \{i \mid q(x_i) = j\}.
+\]
+
+Vì mọi mẫu trong cùng một leaf có cùng giá trị dự đoán $w_j$, ta có:
+
+\[
+f_t(x_i) = w_j, \quad \forall i \in I_j.
+\]
+
+Khi đó objective xấp xỉ có thể viết lại theo từng leaf:
+
+\[
+\tilde{\mathcal{L}}^{(t)}
+=
+\sum_{j=1}^{T}
+\left[
+\left(\sum_{i \in I_j} g_i\right) w_j
++
+\frac{1}{2}
+\left(\sum_{i \in I_j} h_i + \lambda\right) w_j^2
+\right]
++
+\gamma T.
+\]
+
+Đặt:
+
+\[
+G_j = \sum_{i \in I_j} g_i,
+\quad
+H_j = \sum_{i \in I_j} h_i.
+\]
+
+Ta có:
+
+\[
+\tilde{\mathcal{L}}^{(t)}
+=
+\sum_{j=1}^{T}
+\left[
+G_j w_j
++
+\frac{1}{2}(H_j + \lambda)w_j^2
+\right]
++
+\gamma T.
+\]
+
+Để tìm $w_j$ tối ưu, lấy đạo hàm theo $w_j$ và cho bằng 0:
+
+\[
+\frac{\partial \tilde{\mathcal{L}}^{(t)}}{\partial w_j}
+=
+G_j + (H_j + \lambda)w_j = 0.
+\]
+
+Suy ra trọng số leaf tối ưu là:
+
+\[
+w_j^*
+=
+-
+\frac{G_j}{H_j + \lambda}.
+\]
+
+Công thức này cho thấy trọng số của mỗi leaf chỉ phụ thuộc vào tổng gradient, tổng Hessian và hệ số regularization $\lambda$ tại leaf đó.
+
+\subsection{Score của một cấu trúc cây}
+
+Thay $w_j^*$ vào objective, ta thu được score của một cấu trúc cây $q$:
+
+\[
+\tilde{\mathcal{L}}^{(t)}(q)
+=
+-
+\frac{1}{2}
+\sum_{j=1}^{T}
+\frac{G_j^2}{H_j + \lambda}
++
+\gamma T.
+\]
+
+Vì mục tiêu là giảm loss, một cấu trúc cây tốt là cấu trúc làm giá trị objective nhỏ hơn. Công thức này cho phép XGBoost đánh giá chất lượng một cây chỉ dựa vào tổng gradient và tổng Hessian trên từng leaf, thay vì phải tính lại toàn bộ hàm mất mát từ đầu.
+
+\subsection{Split gain}
+
+Trong thực tế, không thể duyệt qua mọi cấu trúc cây có thể. Vì vậy, XGBoost xây cây theo hướng greedy: bắt đầu từ một node và lần lượt chọn split tốt nhất.
+
+Khi một node được tách thành hai node con trái và phải, gọi:
+
+\[
+G_L = \sum_{i \in I_L} g_i,
+\quad
+H_L = \sum_{i \in I_L} h_i,
+\]
+
+\[
+G_R = \sum_{i \in I_R} g_i,
+\quad
+H_R = \sum_{i \in I_R} h_i.
+\]
+
+Tổng gradient và Hessian của node cha là:
+
+\[
+G = G_L + G_R,
+\quad
+H = H_L + H_R.
+\]
+
+Gain của split được tính bởi:
+
+\[
+Gain =
+\frac{1}{2}
+\left[
+\frac{G_L^2}{H_L+\lambda}
++
+\frac{G_R^2}{H_R+\lambda}
+-
+\frac{G^2}{H+\lambda}
+\right]
+-
+\gamma.
+\]
+
+Ý nghĩa của công thức trên là so sánh chất lượng sau khi split với chất lượng trước khi split:
+
+\begin{itemize}
+    \item Hai hạng tử đầu đo chất lượng của hai node con.
+    \item Hạng tử thứ ba đo chất lượng của node cha trước khi split.
+    \item $-\gamma$ là chi phí phạt khi tạo thêm leaf.
+\end{itemize}
+
+Nếu gain lớn, việc phân tách node giúp giảm objective nhiều. Nếu gain nhỏ hoặc âm, split đó không đáng để thực hiện.
+
+\subsection{Ý nghĩa đối với độ phức tạp}
+
+Công thức split gain cho thấy để đánh giá một split, XGBoost không cần tính lại toàn bộ loss từ đầu. Thuật toán chỉ cần duy trì bốn đại lượng:
+
+\[
+G_L, H_L, G_R, H_R.
+\]
+
+Khi duyệt các threshold đã được sắp xếp, ta có thể cập nhật các tổng này một cách tăng dần. Do đó, chi phí đánh giá một split candidate là hằng số nếu các tổng gradient và Hessian đã được cập nhật phù hợp.
+
+Đây là cơ sở cho các thuật toán tìm split trong XGBoost:
+
+\begin{itemize}
+    \item Exact Greedy Split duyệt nhiều threshold để tìm split có gain lớn nhất.
+    \item Column Block Structure giúp giảm chi phí sắp xếp lặp lại.
+    \item Approximate Split Finding giảm số lượng threshold cần xét.
+    \item Sparsity-aware Split Finding chỉ duyệt các giá trị không bị thiếu hoặc khác không.
+\end{itemize}
+
+Như vậy, phần toán học của XGBoost không chỉ giải thích cách mô hình được tối ưu, mà còn tạo nền tảng cho việc phân tích độ phức tạp của các thuật toán tìm split ở những phần tiếp theo.

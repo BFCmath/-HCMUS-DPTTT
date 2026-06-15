@@ -1,0 +1,123 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T5]{fontenc}
+\usepackage[vietnamese]{babel}
+\usepackage{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage[hypertexnames=false]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{setspace}
+\usepackage[numbers]{natbib}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\geometry{margin=2.5cm}
+\setlength{\parindent}{0pt}
+\setstretch{1.0} % Giãn cách giữa các dòng trong cùng đoạn
+\setlength{\parskip}{0.35\baselineskip} % Giãn cách giữa các đoạn
+\setlength{\headheight}{15pt}
+
+\lstdefinestyle{pseudocode}{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    keywordstyle=\bfseries,
+    commentstyle=\itshape,
+    showstringspaces=false,
+    tabsize=4
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{Nhập môn Phân tích độ phức tạp thuật toán}
+\rhead{XGBoost}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  % \vspace*{1cm}
+
+  {\Large\textbf{TRƯỜNG ĐẠI HỌC KHOA HỌC TỰ NHIÊN, ĐHQG-HCM}\\}
+  \vspace{0.4cm}
+  {\large\textbf{KHOA CÔNG NGHỆ THÔNG TIN}\\}
+
+  \vspace{1.6cm}
+
+  {\Large\textbf{BÁO CÁO MÔN HỌC}\\}
+  \vspace{0.5cm}
+  {\Large\textbf{NHẬP MÔN PHÂN TÍCH ĐỘ PHỨC TẠP THUẬT TOÁN}\\}
+
+  \vspace{1.0cm}
+
+  {\Huge\textbf{CHỦ ĐỀ: XGBOOST}\\}
+
+  \vfill
+
+  \begin{tabular}{>{\bfseries}l l}
+    Môn học: & Nhập môn Phân tích độ phức tạp thuật toán \\
+    Chủ đề: & XGBoost \\
+  \end{tabular}
+
+  \vspace{0.8cm}
+
+  \begin{tabular}{>{\bfseries}l l}
+    \multicolumn{2}{l}{\textbf{Thành viên thực hiện:}} \\
+    Trần Minh Hiếu Học & 23120006 \\
+    Phan Trọng Đài & 23120026 \\
+    Trần Đăng Khoa & \textit{chưa cung cấp} \\
+    Lê Văn Trường & 23120181 \\
+    Đinh Nho Hoàng & 23120420\\
+  \end{tabular}
+
+  \vspace{0.8cm}
+
+  \begin{tabular}{>{\bfseries}l l}
+    \multicolumn{2}{l}{\textbf{Giảng viên hướng dẫn:}} \\
+    Thầy Cấn Trần Thành Trung & \\
+    Thầy Lê Phúc Lữ & \\
+  \end{tabular}
+
+  \vfill
+
+  {\large TP. Hồ Chí Minh, \today}
+\end{titlepage}
+
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+
+\pagenumbering{arabic}
+
+\input{sections/01_intro}
+\input{sections/02_decision_tree}
+\input{sections/03_ensemble_learning}
+\input{sections/04_gradient_boosting}
+\input{sections/05_xgboost_overview}
+\input{sections/06_math_formular_xgboost}
+\input{sections/07_exact_greedy_split}
+\input{sections/08_column_block}
+\input{sections/09_approximate_split_finding}
+\input{sections/10_weighted_quantile_sketch}
+\input{sections/11_sparsity_aware_split_finding}
+\input{sections/12_comparition}
+\input{sections/13_code_demonstration}
+\input{sections/14_conclusion}
+
+\newpage
+\bibliographystyle{ieeetr}
+\bibliography{references}
+
+\end{document}

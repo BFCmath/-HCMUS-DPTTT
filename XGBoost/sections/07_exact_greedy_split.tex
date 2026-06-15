@@ -1,0 +1,254 @@
+\section{Exact Greedy Split}
+
+\subsection{Ý tưởng}
+
+Trong quá trình xây dựng cây, một trong những bước quan trọng nhất là tìm split tốt nhất tại mỗi node. Một split được xác định bởi hai thành phần:
+
+\begin{itemize}
+    \item Một đặc trưng $j$.
+    \item Một ngưỡng phân tách $s$.
+\end{itemize}
+
+Split tương ứng có dạng:
+
+\[
+x_j \leq s.
+\]
+
+Những mẫu thỏa điều kiện sẽ đi sang nhánh trái, còn những mẫu không thỏa điều kiện sẽ đi sang nhánh phải. Trong code minh họa, threshold được đặt tại trung điểm giữa hai giá trị feature liên tiếp, nên quy ước $\leq$ giúp định tuyến rõ ràng các mẫu ở đúng phía của threshold.
+
+Exact Greedy Split là thuật toán tìm split bằng cách duyệt qua tất cả các đặc trưng và gần như tất cả các ngưỡng phân tách có thể. Với mỗi split candidate, thuật toán tính gain và chọn split có gain lớn nhất \cite{chen2016xgboost}.
+
+Ý tưởng này được gọi là greedy vì tại mỗi node, thuật toán chỉ chọn split tốt nhất tại thời điểm hiện tại mà không xét toàn bộ cấu trúc cây trong tương lai. Cách tiếp cận này không đảm bảo tìm được cây tối ưu toàn cục, nhưng có tính thực tiễn cao và được sử dụng rộng rãi trong các thuật toán xây dựng cây.
+
+\subsection{Quy trình tìm split}
+
+Giả sử tại một node hiện tại có tập mẫu $I$. Với mỗi mẫu $i \in I$, ta đã biết gradient $g_i$ và Hessian $h_i$.
+
+Đầu tiên, tính tổng gradient và Hessian của node cha:
+
+\[
+G = \sum_{i \in I} g_i,
+\quad
+H = \sum_{i \in I} h_i.
+\]
+
+Sau đó, với mỗi đặc trưng $j$, thuật toán thực hiện:
+
+\begin{enumerate}
+    \item Sắp xếp các mẫu trong $I$ theo giá trị $x_{ij}$ tăng dần.
+    \item Quét các mẫu theo thứ tự đã sắp xếp.
+    \item Cập nhật dần tổng gradient và Hessian của nhánh trái.
+    \item Suy ra tổng gradient và Hessian của nhánh phải.
+    \item Tính gain cho từng candidate split.
+\end{enumerate}
+
+Khi quét từ trái sang phải, thuật toán lần lượt đưa từng mẫu từ phía phải sang phía trái và cập nhật:
+
+\[
+G_L, H_L.
+\]
+
+Khi đó:
+
+\[
+G_R = G - G_L,
+\quad
+H_R = H - H_L.
+\]
+
+Nhờ cách cập nhật này, thuật toán không cần tính lại tổng gradient và Hessian từ đầu cho mỗi split candidate.
+
+\subsection{Split gain}
+
+Công thức gain của một split là:
+
+\[
+Gain =
+\frac{1}{2}
+\left[
+\frac{G_L^2}{H_L+\lambda}
++
+\frac{G_R^2}{H_R+\lambda}
+-
+\frac{G^2}{H+\lambda}
+\right]
+-
+\gamma.
+\]
+
+Trong đó:
+
+\begin{itemize}
+    \item $G_L, H_L$ là tổng gradient và Hessian của nhánh trái.
+    \item $G_R, H_R$ là tổng gradient và Hessian của nhánh phải.
+    \item $G, H$ là tổng gradient và Hessian của node cha.
+    \item $\lambda$ là hệ số regularization cho leaf weight.
+    \item $\gamma$ là chi phí phạt khi thêm leaf mới.
+\end{itemize}
+
+Thành phần:
+
+\[
+\frac{G_L^2}{H_L+\lambda}
++
+\frac{G_R^2}{H_R+\lambda}
+\]
+
+đo chất lượng của hai node con sau khi split. Thành phần:
+
+\[
+\frac{G^2}{H+\lambda}
+\]
+
+đo chất lượng của node cha trước khi split. Vì vậy, gain đo mức cải thiện khi thay một node cha bằng hai node con.
+
+Nếu gain càng lớn, split càng có lợi. Nếu gain nhỏ hoặc âm, thuật toán có thể không split node đó để tránh làm cây phức tạp hơn nhưng không cải thiện objective đủ nhiều.
+
+\subsection{Mã giả}
+
+Thuật toán Exact Greedy Split có thể được mô tả như sau:
+
+\begin{lstlisting}[style=pseudocode, caption={Exact Greedy Split}, label={lst:exact_greedy_split}]
+ExactGreedySplit(I):
+    best_gain = 0
+    best_split = None
+
+    G = sum(g_i for i in I)
+    H = sum(h_i for i in I)
+
+    for each feature j:
+        sort I by feature value x_j
+
+        G_L = 0
+        H_L = 0
+
+        group equal feature values together
+
+        for each value group in sorted order:
+            move the whole group to the left side
+            update G_L and H_L
+
+            if this is the last value group:
+                break
+
+            G_R = G - G_L
+            H_R = H - H_L
+
+            if H_L < min_child_weight or H_R < min_child_weight:
+                continue
+
+            gain = compute_gain(G_L, H_L, G_R, H_R, G, H)
+
+            if gain > best_gain:
+                best_gain = gain
+                threshold = midpoint(current_value, next_value)
+                best_split = (j, threshold)
+
+    return best_split, best_gain
+\end{lstlisting}
+
+Trong phần code, \texttt{best\_gain} được khởi tạo bằng $0$ thay vì $-\infty$. Vì vậy, nếu mọi split hợp lệ đều có gain không dương, hàm trả về \texttt{None}. Đây là hành vi tương ứng với việc không tách node khi split không làm giảm objective đủ tốt.
+
+Ngoài ra, các giá trị feature trùng nhau được xử lý theo nhóm. Thuật toán chỉ xét threshold sau khi toàn bộ nhóm giá trị bằng nhau đã được chuyển sang nhánh trái. Điều này tránh tạo ra threshold không thể tách hợp lệ hai mẫu có cùng giá trị feature.
+
+\subsection{Ví dụ minh họa}
+
+Giả sử tại một node, ta xét đặc trưng $x_j$ với các giá trị đã sắp xếp như sau:
+
+\[
+1.2,\ 2.5,\ 3.1,\ 4.0,\ 5.6.
+\]
+
+Các threshold candidate có thể nằm giữa hai giá trị liên tiếp:
+
+\[
+s_1 = \frac{1.2 + 2.5}{2},
+\quad
+s_2 = \frac{2.5 + 3.1}{2},
+\quad
+s_3 = \frac{3.1 + 4.0}{2},
+\quad
+s_4 = \frac{4.0 + 5.6}{2}.
+\]
+
+Với mỗi threshold, thuật toán chia dữ liệu thành hai phần, tính $G_L, H_L, G_R, H_R$, sau đó tính gain. Split có gain lớn nhất sẽ được chọn.
+
+Ví dụ này cho thấy Exact Greedy Split có tính trực tiếp và dễ hiểu: thuật toán thử nhiều khả năng phân tách và chọn khả năng tốt nhất theo công thức gain.
+
+\subsection{Chứng minh độ phức tạp tại một node}
+
+Giả sử tại một node có $n$ mẫu và $d$ đặc trưng.
+
+Với một đặc trưng, để xét các threshold theo thứ tự tăng dần, ta cần sắp xếp $n$ giá trị. Chi phí sắp xếp là:
+
+\[
+O(n \log n).
+\]
+
+Sau khi sắp xếp, ta quét tuyến tính qua các giá trị để cập nhật gradient và Hessian. Chi phí quét là:
+
+\[
+O(n).
+\]
+
+Vì vậy, với một đặc trưng, chi phí là:
+
+\[
+O(n \log n + n) = O(n \log n).
+\]
+
+Với $d$ đặc trưng, chi phí tại một node là:
+
+\[
+O(dn \log n).
+\]
+
+Đây là chi phí nếu ta phải sắp xếp lại dữ liệu khi tìm split tại node.
+
+\subsection{Độ phức tạp khi xây dựng nhiều cây}
+
+Trong XGBoost, mô hình gồm nhiều cây. Gọi:
+
+\begin{itemize}
+    \item $K$ là số cây.
+    \item $h$ là độ sâu tối đa của mỗi cây.
+    \item $n$ là số mẫu.
+    \item $d$ là số đặc trưng.
+\end{itemize}
+
+Nếu xét theo từng tầng của cây, mỗi tầng có thể chứa nhiều node, nhưng tổng số mẫu xuất hiện trên toàn bộ các node ở cùng một tầng xấp xỉ $n$, vì mỗi mẫu chỉ thuộc về một node tại một tầng.
+
+Do đó, chi phí tìm split cho một tầng là xấp xỉ:
+
+\[
+O(dn \log n).
+\]
+
+Với độ sâu tối đa $h$, chi phí cho một cây là:
+
+\[
+O(hdn \log n).
+\]
+
+Với $K$ cây, tổng chi phí là:
+
+\[
+O(Khdn \log n).
+\]
+
+Nếu dữ liệu đã được sắp xếp trước hoặc được lưu bằng cấu trúc hỗ trợ scan theo cột, chi phí sắp xếp lặp lại có thể được giảm. Đây chính là động lực cho Column Block Structure trong XGBoost.
+
+\subsection{Nhận xét}
+
+Exact Greedy Split có ưu điểm là tìm split chính xác nhất theo tiêu chí gain, vì nó xét gần như toàn bộ các ngưỡng có thể. Tuy nhiên, nhược điểm lớn nhất là chi phí tính toán cao khi số mẫu hoặc số đặc trưng lớn.
+
+Có thể tóm tắt như sau:
+
+\begin{itemize}
+    \item Exact Greedy Split chính xác nhưng chậm.
+    \item Phần tốn kém nhất là sắp xếp và quét qua nhiều candidate split.
+    \item Đây là nền tảng để hiểu các tối ưu tiếp theo trong XGBoost.
+\end{itemize}
+
+Các kỹ thuật như Column Block Structure, Approximate Split Finding và Sparsity-aware Split Finding đều có thể được xem là những cách giảm chi phí của Exact Greedy Split trong các bối cảnh khác nhau.

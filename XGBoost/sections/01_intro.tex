@@ -1,0 +1,33 @@
+\section{Introduction}
+
+\subsection{Bối cảnh}
+
+Trong các bài toán học máy hiện đại, dữ liệu thường có kích thước lớn, số lượng đặc trưng cao và quan hệ giữa các biến đầu vào có thể rất phức tạp. Các mô hình tuyến tính có ưu điểm là đơn giản, dễ huấn luyện và dễ diễn giải, nhưng thường gặp hạn chế khi dữ liệu có quan hệ phi tuyến hoặc có nhiều tương tác giữa các đặc trưng. Trong bối cảnh đó, các mô hình dựa trên cây quyết định trở thành một hướng tiếp cận quan trọng nhờ khả năng mô hình hóa quan hệ phi tuyến, xử lý linh hoạt cả dữ liệu số lẫn dữ liệu phân loại, đồng thời vẫn giữ được mức độ diễn giải tương đối trực quan \cite{breiman1984classification}.
+
+Tuy nhiên, một cây quyết định đơn lẻ thường có khả năng dự đoán chưa đủ mạnh và dễ bị overfitting nếu cây phát triển quá sâu. Vì vậy, các phương pháp học tổ hợp được sử dụng để kết hợp nhiều mô hình yếu thành một mô hình mạnh hơn. Trong nhóm phương pháp này, Bagging tập trung giảm phương sai bằng cách huấn luyện nhiều mô hình độc lập \cite{breiman1996bagging}, trong khi Boosting xây dựng các mô hình theo cách tuần tự, trong đó mô hình sau tập trung cải thiện lỗi của mô hình trước. Gradient Boosting là một trong những phương pháp Boosting quan trọng, đặt quá trình học trong góc nhìn tối ưu hàm mất mát theo hướng gradient \cite{friedman2001gradient}.
+
+XGBoost, viết tắt của Extreme Gradient Boosting, là một hệ thống gradient tree boosting được thiết kế với mục tiêu vừa đạt hiệu quả dự đoán cao, vừa có khả năng mở rộng trên dữ liệu lớn. Theo Chen và Guestrin, XGBoost không chỉ là một mô hình học máy, mà còn là một hệ thống tối ưu toàn diện cho quá trình huấn luyện cây tăng cường. Các cải tiến quan trọng của XGBoost bao gồm regularization, approximate split finding, weighted quantile sketch, sparsity-aware split finding, column block structure, cache-aware access và out-of-core computation \cite{chen2016xgboost}.
+
+Dưới góc nhìn của môn Nhập môn Phân tích độ phức tạp thuật toán, điểm đáng quan tâm của XGBoost không chỉ nằm ở độ chính xác dự đoán, mà còn nằm ở cách hệ thống này giảm chi phí tính toán trong quá trình xây dựng cây. Trong đó, bài toán tìm điểm phân tách tốt nhất, hay còn gọi là \textit{split finding}, là một trong những bước tốn thời gian nhất. Do đó, việc phân tích XGBoost cũng là cơ hội để thấy rõ cách các ý tưởng thuật toán và cấu trúc dữ liệu có thể cải thiện hiệu năng của một hệ thống học máy thực tế.
+
+\subsection{Mục tiêu báo cáo}
+
+Báo cáo này tập trung tìm hiểu XGBoost dưới góc nhìn thuật toán và độ phức tạp. Các mục tiêu chính gồm:
+
+\begin{itemize}
+    \item Trình bày nền tảng về cây quyết định, học tổ hợp, Boosting và Gradient Boosting.
+    \item Giải thích cách XGBoost mở rộng Gradient Boosting thông qua regularization và khai triển Taylor bậc hai.
+    \item Phân tích công thức toán học cốt lõi của XGBoost, bao gồm gradient, Hessian, trọng số lá và split gain.
+    \item Tìm hiểu các thuật toán tìm split trong XGBoost, bắt đầu từ Exact Greedy Split.
+    \item Phân tích độ phức tạp của các bước xây dựng cây, đặc biệt là chi phí tìm split.
+\end{itemize}
+
+Trọng tâm của báo cáo là làm rõ vì sao việc tìm split là nút thắt tính toán trong các mô hình cây, và XGBoost đã sử dụng những kỹ thuật thuật toán nào để giảm chi phí này.
+
+\subsection{Vai trò của Split Finding trong độ phức tạp thuật toán}
+
+Trong quá trình xây dựng cây quyết định, tại mỗi node, thuật toán cần chọn một đặc trưng và một ngưỡng phân tách sao cho chất lượng mô hình được cải thiện nhiều nhất. Nếu dữ liệu có $n$ mẫu và $d$ đặc trưng, việc duyệt qua nhiều ngưỡng phân tách trên từng đặc trưng có thể dẫn đến chi phí rất lớn.
+
+Đối với một cây đơn lẻ, chi phí tìm split đã là một thành phần quan trọng. Với XGBoost, quá trình này còn được lặp lại qua nhiều cây trong nhiều vòng boosting. Nếu số cây là $K$ và độ sâu tối đa của mỗi cây là $h$, thì chi phí tìm split có thể trở thành thành phần chi phối thời gian huấn luyện.
+
+Do đó, phân tích XGBoost dưới góc nhìn độ phức tạp thực chất là phân tích cách hệ thống này tối ưu quá trình tìm split. Các kỹ thuật như Column Block Structure, Approximate Split Finding, Weighted Quantile Sketch và Sparsity-aware Split Finding đều hướng đến mục tiêu chung: giảm số lần sắp xếp, giảm số candidate split cần xét, tận dụng dữ liệu thưa và cải thiện khả năng mở rộng của quá trình huấn luyện \cite{chen2016xgboost}.

@@ -1,0 +1,328 @@
+\section{Sparsity-aware Split Finding}
+
+\subsection{Motivation}
+
+Nhiều tập dữ liệu thực tế có tính thưa, hay còn gọi là \textit{sparse}. Điều này có nghĩa là phần lớn giá trị trong ma trận dữ liệu là $0$, bị thiếu, hoặc không cần lưu trữ rõ ràng.
+
+Trong XGBoost thực tế, sparse-aware split finding có thể tận dụng các entry không được lưu trong sparse matrix. Trong code minh họa của báo cáo, dữ liệu thiếu được biểu diễn bằng \texttt{None}; các giá trị số $0.0$ vẫn được xem là giá trị hợp lệ và vẫn được scan.
+
+Một số nguồn tạo ra dữ liệu sparse gồm:
+
+\begin{itemize}
+    \item \textbf{One-hot encoding}: mỗi mẫu chỉ có một vài cột bằng $1$, còn lại bằng $0$.
+    \item \textbf{TF-IDF}: biểu diễn văn bản thường có rất nhiều từ vựng, nhưng mỗi văn bản chỉ chứa một số ít từ.
+    \item \textbf{Recommender systems}: ma trận user-item thường có rất nhiều ô trống.
+    \item \textbf{Missing values}: một số feature không có giá trị tại một số mẫu.
+\end{itemize}
+
+Ví dụ, một feature có $1{,}000{,}000$ mẫu nhưng chỉ có $5{,}000$ giá trị thực sự khác $0$ hoặc không bị thiếu. Nếu thuật toán vẫn duyệt toàn bộ $1{,}000{,}000$ giá trị, phần lớn phép tính sẽ bị lãng phí.
+
+Trong bối cảnh này, mục tiêu của Sparsity-aware Split Finding là:
+
+\begin{center}
+\textit{Chỉ duyệt những giá trị thật sự tồn tại, đồng thời xử lý missing value một cách tối ưu.}
+\end{center}
+
+Đây là một trong những đóng góp quan trọng của XGBoost, giúp hệ thống hoạt động hiệu quả trên dữ liệu sparse \cite{chen2016xgboost}.
+
+\subsection{Ý tưởng}
+
+Thay vì duyệt toàn bộ dữ liệu, XGBoost chỉ duyệt các phần tử thật sự được lưu. Với paper XGBoost, điều này thường bao gồm các phần tử non-missing hoặc non-zero trong sparse matrix. Với code minh họa, điều kiện cụ thể là non-missing, tức khác \texttt{None}. Ký hiệu:
+
+\[
+\|x\|_0
+\]
+
+là số phần tử được scan. Trong repository, đại lượng này tương ứng với số phần tử non-missing.
+
+Thông thường, với dữ liệu sparse:
+
+\[
+\|x\|_0 \ll nd,
+\]
+
+trong đó:
+
+\begin{itemize}
+    \item $n$ là số mẫu.
+    \item $d$ là số feature.
+    \item $nd$ là tổng số ô nếu dữ liệu được lưu dưới dạng dense matrix.
+\end{itemize}
+
+Điểm quan trọng là XGBoost không cần duyệt toàn bộ ma trận $n \times d$. Thay vào đó, thuật toán chỉ duyệt các entry thực sự được lưu trong sparse matrix.
+
+Với một feature $k$, gọi:
+
+\[
+I_k = \{i \in I \mid x_{ik} \neq \text{missing}\}
+\]
+
+là tập các mẫu tại node hiện tại có giá trị không bị thiếu ở feature $k$.
+
+Thuật toán chỉ scan trên $I_k$, thay vì scan toàn bộ tập mẫu $I$.
+
+\subsection{Default Direction cho Missing Value}
+
+Một vấn đề quan trọng là: nếu một mẫu bị thiếu giá trị tại feature đang được dùng để split, mẫu đó nên đi sang nhánh trái hay nhánh phải?
+
+XGBoost không cần điền missing value trước bằng mean, median hoặc $0$. Thay vào đó, tại mỗi split, thuật toán học một hướng mặc định, gọi là \textit{default direction}.
+
+Có hai khả năng:
+
+\begin{itemize}
+    \item Missing $\rightarrow$ Left.
+    \item Missing $\rightarrow$ Right.
+\end{itemize}
+
+Thuật toán sẽ thử cả hai khả năng và chọn hướng tạo ra gain lớn hơn.
+
+Một split trong XGBoost có thể hiểu như sau:
+
+\begin{lstlisting}[style=pseudocode, caption={Split với default direction}, label={lst:default_direction}]
+if x_k is missing:
+    go to default direction
+else if x_k <= threshold:
+    go left
+else:
+    go right
+\end{lstlisting}
+
+Điểm quan trọng là default direction không cố định cho toàn bộ cây. Mỗi node có thể học một default direction khác nhau, tùy vào feature, threshold và phân phối dữ liệu tại node đó.
+
+\subsection{Hai trường hợp missing đi trái/phải}
+
+Giả sử tại một node, ta đang xét feature $k$. Các mẫu có giá trị không missing được sắp xếp theo $x_{ik}$.
+
+Thuật toán xét hai trường hợp.
+
+\textbf{Trường hợp 1: Missing đi sang phải.}
+
+Thuật toán scan các giá trị non-missing theo thứ tự tăng dần. Ban đầu:
+
+\[
+G_L = 0,
+\quad
+H_L = 0.
+\]
+
+Mỗi khi scan qua một mẫu non-missing, mẫu đó được đưa sang nhánh trái:
+
+\[
+G_L \leftarrow G_L + g_i,
+\quad
+H_L \leftarrow H_L + h_i.
+\]
+
+Khi đó:
+
+\[
+G_R = G - G_L,
+\quad
+H_R = H - H_L.
+\]
+
+Vì các mẫu missing không được scan, chúng vẫn nằm trong phần còn lại, tức là nhánh phải. Do đó trường hợp này tương ứng với:
+
+\[
+\text{Missing} \rightarrow \text{Right}.
+\]
+
+\textbf{Trường hợp 2: Missing đi sang trái.}
+
+Thuật toán scan các giá trị non-missing theo thứ tự giảm dần. Ban đầu:
+
+\[
+G_R = 0,
+\quad
+H_R = 0.
+\]
+
+Mỗi khi scan qua một mẫu non-missing, mẫu đó được đưa sang nhánh phải:
+
+\[
+G_R \leftarrow G_R + g_i,
+\quad
+H_R \leftarrow H_R + h_i.
+\]
+
+Khi đó:
+
+\[
+G_L = G - G_R,
+\quad
+H_L = H - H_R.
+\]
+
+Vì các mẫu missing không được scan, chúng vẫn nằm trong phần còn lại, tức là nhánh trái. Do đó trường hợp này tương ứng với:
+
+\[
+\text{Missing} \rightarrow \text{Left}.
+\]
+
+Sau khi xét cả hai trường hợp, thuật toán chọn split và default direction có gain lớn nhất.
+
+\subsection{Pseudocode}
+
+\begin{lstlisting}[style=pseudocode, caption={Sparsity-aware Split Finding}, label={lst:sparsity_aware_split}]
+SparsityAwareSplit(I):
+    best_gain = 0
+    best_split = None
+    best_default_direction = None
+
+    G = sum(g_i for i in I)
+    H = sum(h_i for i in I)
+
+    for each feature k:
+        I_k = {i in I | x_ik is not missing}
+
+        # Case 1: missing values go right
+        G_L = 0
+        H_L = 0
+
+        scan I_k in increasing order of x_ik:
+            G_L = G_L + g_i
+            H_L = H_L + h_i
+
+            G_R = G - G_L
+            H_R = H - H_L
+
+            gain = compute_gain(G_L, H_L, G_R, H_R)
+
+            if gain > best_gain:
+                best_gain = gain
+                best_split = (k, x_ik)
+                best_default_direction = right
+
+        # Case 2: missing values go left
+        G_R = 0
+        H_R = 0
+
+        scan I_k in decreasing order of x_ik:
+            G_R = G_R + g_i
+            H_R = H_R + h_i
+
+            G_L = G - G_R
+            H_L = H - H_R
+
+            gain = compute_gain(G_L, H_L, G_R, H_R)
+
+            if gain > best_gain:
+                best_gain = gain
+                best_split = (k, x_ik)
+                best_default_direction = left
+
+    return best_split, best_default_direction, best_gain
+\end{lstlisting}
+
+Mã giả trên cho thấy thuật toán chỉ scan các giá trị non-missing. Missing values không bị loại bỏ, mà được đưa về nhánh mặc định sao cho gain tốt nhất.
+
+\subsection{Phân tích độ phức tạp}
+
+Trước hết, xét một feature $k$ tại một node. Gọi:
+
+\[
+|I_k|
+\]
+
+là số mẫu không missing ở feature $k$ trong node đó.
+
+Thuật toán scan $I_k$ hai lần:
+
+\begin{itemize}
+    \item Một lần theo chiều tăng dần để xét Missing $\rightarrow$ Right.
+    \item Một lần theo chiều giảm dần để xét Missing $\rightarrow$ Left.
+\end{itemize}
+
+Nếu thứ tự theo feature đã có sẵn, chi phí scan cho feature $k$ là:
+
+\[
+O(2|I_k|) = O(|I_k|).
+\]
+
+Xét trên tất cả feature, tổng chi phí là:
+
+\[
+O\left(\sum_{k=1}^{d} |I_k|\right).
+\]
+
+Tổng này chính là số lượng phần tử non-missing trong dữ liệu tại node. Ký hiệu là:
+
+\[
+\|x\|_0.
+\]
+
+Vì vậy, chi phí scan của Sparsity-aware Split Finding là:
+
+\[
+O(\|x\|_0).
+\]
+
+Trong khi đó, nếu duyệt dữ liệu như dense matrix, chi phí scan sẽ là:
+
+\[
+O(nd).
+\]
+
+Với dữ liệu sparse, thường có:
+
+\[
+\|x\|_0 \ll nd.
+\]
+
+Do đó, Sparsity-aware Split Finding có thể giảm đáng kể thời gian chạy khi số phần tử thật sự được scan nhỏ hơn nhiều so với dense matrix.
+
+Trong code Python hiện tại, hàm \texttt{sparsity\_aware\_split} vẫn tự sort các giá trị non-missing ở từng feature và từng node. Vì vậy, nếu tính cả sorting, chi phí của bản minh họa không chỉ là $O(\|x\|_0)$. Chi phí tuyến tính ở trên là chi phí scan sau khi đã có thứ tự, hoặc khi kết hợp với cấu trúc dữ liệu đã sắp xếp như Column Block.
+
+\subsection{Ví dụ minh họa}
+
+Giả sử xét feature \textit{Age} tại một node:
+
+\begin{table}[htbp]
+    \centering
+    \caption{Ví dụ dữ liệu có missing value}
+    \label{tab:sparsity_example}
+    \begin{tabular}{ccc}
+        \toprule
+        \textbf{Sample} & \textbf{Age} & \textbf{Ghi chú} \\
+        \midrule
+        1 & missing & thiếu giá trị \\
+        2 & 18 & non-missing \\
+        3 & missing & thiếu giá trị \\
+        4 & 25 & non-missing \\
+        5 & 40 & non-missing \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Tập mẫu tại node là:
+
+\[
+I = \{1,2,3,4,5\}.
+\]
+
+Tập non-missing của feature Age là:
+
+\[
+I_k = \{2,4,5\}.
+\]
+
+Thuật toán chỉ scan các mẫu $2,4,5$ để tìm threshold. Hai mẫu $1$ và $3$ không bị duyệt khi xét threshold, nhưng vẫn được đưa sang trái hoặc phải thông qua default direction.
+
+Như vậy, thuật toán vừa tránh lãng phí phép tính trên missing values, vừa không cần loại bỏ hoặc điền trước giá trị thiếu.
+
+\subsection{Nhận xét}
+
+Sparsity-aware Split Finding là một cải tiến quan trọng của XGBoost vì nó xử lý đồng thời hai vấn đề:
+
+\begin{itemize}
+    \item Giảm chi phí tính toán bằng cách chỉ duyệt các giá trị thật sự được lưu; trong code minh họa là các giá trị khác \texttt{None}.
+    \item Xử lý missing values bằng cách học default direction thay vì cần imputation.
+\end{itemize}
+
+Có thể tóm tắt ý tưởng chính như sau:
+
+\begin{center}
+\textit{Naive split finding duyệt mọi ô dữ liệu; Sparsity-aware split finding chỉ duyệt các entry thật sự tồn tại.}
+\end{center}
+
+Đây là một trong những lý do quan trọng giúp XGBoost hoạt động hiệu quả trên dữ liệu sparse, dữ liệu thiếu và dữ liệu được sinh ra từ one-hot encoding.

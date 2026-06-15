@@ -1,0 +1,87 @@
+\section{XGBoost Overview}
+
+\subsection{XGBoost là gì?}
+
+XGBoost, viết tắt của Extreme Gradient Boosting, là một hệ thống học máy dựa trên Gradient Boosted Decision Trees. Mục tiêu của XGBoost là xây dựng một hệ thống tree boosting vừa có độ chính xác cao, vừa có khả năng mở rộng tốt trên dữ liệu lớn \cite{chen2016xgboost}.
+
+Về mặt mô hình, XGBoost vẫn thuộc họ Gradient Boosting. Dự đoán cuối cùng được biểu diễn dưới dạng tổng của nhiều cây hồi quy:
+
+\[
+\hat{y}_i = \sum_{k=1}^{K} f_k(x_i),
+\]
+
+trong đó mỗi $f_k$ là một cây hồi quy. Mỗi cây mới được thêm vào nhằm cải thiện dự đoán của mô hình hiện tại.
+
+Điểm khác biệt quan trọng của XGBoost không chỉ nằm ở việc sử dụng nhiều cây, mà nằm ở cách hệ thống này tối ưu quá trình xây dựng cây. XGBoost kết hợp nhiều cải tiến ở cả hai mức:
+
+\begin{itemize}
+    \item \textbf{Mức mô hình}: regularization, khai triển Taylor bậc hai, shrinkage và column subsampling.
+    \item \textbf{Mức thuật toán/hệ thống}: tối ưu tìm split, xử lý dữ liệu thưa, column block structure, cache-aware access và out-of-core computation.
+\end{itemize}
+
+Nhờ vậy, XGBoost không chỉ là một mô hình Gradient Boosting, mà còn là một hệ thống được thiết kế để huấn luyện hiệu quả trên dữ liệu quy mô lớn.
+
+\subsection{Khác biệt so với Gradient Boosting truyền thống}
+
+Gradient Boosting truyền thống tập trung vào ý tưởng học tuần tự: mỗi mô hình mới được thêm vào để cải thiện lỗi của mô hình trước \cite{friedman2001gradient}. XGBoost kế thừa ý tưởng này nhưng bổ sung nhiều cải tiến quan trọng.
+
+Các khác biệt chính gồm:
+
+\begin{itemize}
+    \item \textbf{Regularization trong hàm mục tiêu}: XGBoost thêm thành phần phạt trực tiếp vào objective để kiểm soát số leaf và độ lớn của leaf weight.
+    \item \textbf{Sử dụng thông tin bậc hai}: thay vì chỉ dùng gradient bậc nhất, XGBoost dùng cả gradient và Hessian để xấp xỉ hàm mục tiêu.
+    \item \textbf{Tối ưu split finding}: XGBoost thiết kế nhiều kỹ thuật để giảm chi phí tìm split, vốn là bước tốn kém nhất khi xây dựng cây.
+    \item \textbf{Xử lý dữ liệu thưa}: XGBoost hỗ trợ Sparsity-aware Split Finding để xử lý missing values, one-hot encoding và dữ liệu có nhiều giá trị bằng không.
+    \item \textbf{Tối ưu hệ thống}: XGBoost sử dụng column block, cache-aware access, compression và sharding để tăng hiệu năng huấn luyện.
+\end{itemize}
+
+Những cải tiến này giúp XGBoost đạt hiệu quả tốt hơn so với cách cài đặt Gradient Boosting cơ bản, đặc biệt trong bối cảnh dữ liệu lớn hoặc dữ liệu thưa.
+
+\subsection{Các đặc điểm nổi bật}
+
+Một số đặc điểm nổi bật của XGBoost gồm:
+
+\begin{itemize}
+    \item \textbf{Regularized objective}: thêm penalty cho số lượng leaf và độ lớn của leaf weight, giúp kiểm soát độ phức tạp của cây.
+    \item \textbf{Second-order approximation}: sử dụng cả gradient và Hessian để xấp xỉ hàm mục tiêu khi thêm cây mới.
+    \item \textbf{Exact Greedy Split}: hỗ trợ tìm split chính xác bằng cách duyệt qua các ngưỡng có thể.
+    \item \textbf{Approximate Split Finding}: giảm số lượng candidate split cần xét khi dữ liệu quá lớn.
+    \item \textbf{Weighted Quantile Sketch}: chọn candidate split dựa trên quantile có trọng số, phù hợp với objective bậc hai của XGBoost.
+    \item \textbf{Sparsity-aware Split Finding}: xử lý missing values và dữ liệu thưa bằng cách học default direction cho mỗi split.
+    \item \textbf{Column Block Structure}: lưu dữ liệu theo cột đã sắp xếp để giảm chi phí sort lặp lại.
+    \item \textbf{Cache-aware và out-of-core optimization}: tối ưu truy cập bộ nhớ và hỗ trợ dữ liệu không vừa RAM.
+\end{itemize}
+
+Các cải tiến trên cùng hướng đến một mục tiêu chung: giảm chi phí huấn luyện trong khi vẫn giữ được chất lượng mô hình.
+
+\subsection{Vai trò của XGBoost trong báo cáo}
+
+Trong phạm vi báo cáo này, XGBoost được phân tích dưới góc nhìn độ phức tạp thuật toán. Vì vậy, báo cáo không chỉ quan tâm đến kết quả dự đoán, mà tập trung vào câu hỏi:
+
+\begin{center}
+\textit{XGBoost đã giảm chi phí tính toán trong quá trình xây dựng cây như thế nào?}
+\end{center}
+
+Để trả lời câu hỏi này, báo cáo đi theo hai hướng chính:
+
+\begin{itemize}
+    \item Phân tích công thức toán học của XGBoost, bao gồm objective, regularization, gradient, Hessian, leaf weight và split gain.
+    \item Phân tích các thuật toán tìm split, bắt đầu từ Exact Greedy Split và tiếp tục với các kỹ thuật tối ưu như Column Block Structure, Approximate Split Finding, Weighted Quantile Sketch và Sparsity-aware Split Finding.
+\end{itemize}
+
+Trong đó, Exact Greedy Split đóng vai trò là thuật toán nền tảng. Các kỹ thuật còn lại có thể được xem là các cải tiến nhằm giảm chi phí khi dữ liệu lớn, dữ liệu thưa hoặc không thể xử lý hiệu quả bằng cách duyệt toàn bộ split candidate.
+
+\subsection{Ứng dụng}
+
+XGBoost được sử dụng rộng rãi trong nhiều bài toán học máy thực tế, đặc biệt là các bài toán với dữ liệu dạng bảng. Một số nhóm ứng dụng phổ biến gồm:
+
+\begin{itemize}
+    \item Phân loại rủi ro tín dụng.
+    \item Dự đoán click-through rate trong quảng cáo.
+    \item Phân loại hoặc phân khúc khách hàng.
+    \item Dự đoán doanh số.
+    \item Learning to rank trong hệ thống tìm kiếm.
+    \item Phát hiện gian lận.
+\end{itemize}
+
+Lý do XGBoost phổ biến là vì mô hình này đạt cân bằng tốt giữa độ chính xác, khả năng xử lý dữ liệu dạng bảng và hiệu năng huấn luyện. Đây cũng là lý do XGBoost thường được xem là một trong những baseline mạnh cho nhiều bài toán machine learning truyền thống.

@@ -1,0 +1,232 @@
+\section{Approximate Split Finding}
+
+\subsection{Motivation}
+
+Exact Greedy Split tìm split tốt nhất bằng cách xét gần như toàn bộ các ngưỡng phân tách có thể trên mỗi thuộc tính. Nếu một thuộc tính có $n$ giá trị khác nhau thì số candidate split cần xét xấp xỉ:
+
+\[
+n - 1.
+\]
+
+Điều này đồng nghĩa với việc thuật toán phải tính gain cho rất nhiều vị trí khác nhau.
+
+Khi dữ liệu có hàng triệu mẫu hoặc hàng nghìn thuộc tính, chi phí này trở nên rất lớn. Mặc dù Column Block Structure đã loại bỏ phần lớn chi phí sắp xếp lặp lại, thuật toán vẫn phải quét qua rất nhiều candidate split.
+
+Do đó, câu hỏi đặt ra là:
+
+\begin{center}
+\textit{Liệu có cần phải xét mọi split candidate hay không?}
+\end{center}
+
+Approximate Split Finding được đề xuất để trả lời câu hỏi này. Ý tưởng là chỉ xét một số lượng nhỏ candidate đại diện thay vì toàn bộ các ngưỡng có thể.
+
+Trong repository minh họa, thuật toán này được cài đặt trong \texttt{approximate\_split}. Hàm này dùng \texttt{propose\_candidates} để sinh candidate theo weighted quantile đơn giản dựa trên Hessian, sau đó đánh giá gain trên các candidate đó. Đây là bản đơn giản hóa để minh họa ý tưởng, không phải cài đặt distributed sketch đầy đủ của XGBoost.
+
+\subsection{Ý tưởng}
+
+Giả sử một thuộc tính có các giá trị đã được sắp xếp:
+
+\[
+1,2,3,4,5,6,7,8,9,10.
+\]
+
+Exact Greedy Split sẽ xét gần như toàn bộ các vị trí phân tách:
+
+\[
+1.5,\;2.5,\;3.5,\;\ldots,\;9.5.
+\]
+
+Trong khi đó, Approximate Split Finding chỉ chọn một số điểm đại diện:
+
+\[
+2,\;5,\;8.
+\]
+
+Sau đó thuật toán chỉ tính gain tại các vị trí này.
+
+Ý tưởng trực giác là nếu dữ liệu được chia đủ đều, split tốt nhất thường nằm gần một trong các điểm đại diện. Vì vậy, việc bỏ qua nhiều candidate không làm giảm chất lượng mô hình quá nhiều nhưng giúp giảm đáng kể chi phí tính toán.
+
+\subsection{Global Proposal}
+
+Trong chiến lược Global Proposal, candidate split được xây dựng một lần trên toàn bộ tập dữ liệu trước khi quá trình xây dựng cây bắt đầu.
+
+Giả sử feature $x_j$ được chia thành một tập candidate:
+
+\[
+S_j = \{s_1, s_2, \ldots, s_q\}.
+\]
+
+Tập candidate này sẽ được dùng lại cho tất cả các node của cây.
+
+Ý tưởng tổng quát:
+
+\begin{enumerate}
+    \item Phân tích phân phối của toàn bộ dữ liệu.
+    \item Sinh ra các candidate split.
+    \item Mọi node dùng chung tập candidate đó.
+\end{enumerate}
+
+\textbf{Ưu điểm}
+
+\begin{itemize}
+    \item Chi phí xây dựng candidate thấp.
+    \item Dễ triển khai.
+    \item Tiết kiệm bộ nhớ.
+\end{itemize}
+
+\textbf{Nhược điểm}
+
+\begin{itemize}
+    \item Candidate được tạo từ dữ liệu toàn cục.
+    \item Có thể không phản ánh tốt phân phối dữ liệu tại các node sâu trong cây.
+\end{itemize}
+
+\subsection{Local Proposal}
+
+Trong chiến lược Local Proposal, mỗi node tự xây dựng tập candidate split của riêng mình.
+
+Giả sử một node chỉ chứa một phần nhỏ dữ liệu. Candidate được sinh dựa trên chính dữ liệu của node đó thay vì dữ liệu toàn cục.
+
+Ý tưởng tổng quát:
+
+\begin{enumerate}
+    \item Thu thập dữ liệu thuộc node hiện tại.
+    \item Xây dựng candidate split mới.
+    \item Đánh giá gain trên tập candidate đó.
+\end{enumerate}
+
+\textbf{Ưu điểm}
+
+\begin{itemize}
+    \item Candidate phản ánh tốt hơn phân phối dữ liệu tại node.
+    \item Thường cho split chất lượng cao hơn.
+\end{itemize}
+
+\textbf{Nhược điểm}
+
+\begin{itemize}
+    \item Tốn thời gian hơn.
+    \item Candidate phải được xây dựng lại nhiều lần.
+\end{itemize}
+
+\subsection{Liên hệ với Weighted Quantile Sketch}
+
+Một câu hỏi quan trọng là:
+
+\begin{center}
+\textit{Làm thế nào để chọn các candidate split đại diện?}
+\end{center}
+
+Nếu chọn ngẫu nhiên, chất lượng split có thể rất kém.
+
+XGBoost giải quyết vấn đề này bằng kỹ thuật \textit{Weighted Quantile Sketch}. Thay vì lấy mẫu ngẫu nhiên, thuật toán chọn candidate dựa trên các quantile của dữ liệu và trọng số Hessian tương ứng.
+
+Nhờ đó, số lượng candidate được giảm đáng kể nhưng vẫn giữ được những vị trí có khả năng tạo gain cao.
+
+Weighted Quantile Sketch sẽ được trình bày chi tiết ở phần tiếp theo.
+
+\subsection{Pseudocode}
+
+\begin{lstlisting}[style=pseudocode,
+caption={Approximate Split Finding},
+label={lst:approx_split}]
+ApproximateSplit(I, epsilon):
+    best_gain = 0
+    best_split = None
+
+    G = sum(g_i for i in I)
+    H = sum(h_i for i in I)
+
+    for each feature k:
+        candidates = weighted_quantile_candidates(k, I, epsilon)
+
+        for each adjacent candidate pair:
+            threshold = midpoint(candidate, next_candidate)
+
+            evaluate missing -> right
+            evaluate missing -> left
+
+            if gain > best_gain:
+                update best_split
+
+    return best_split
+\end{lstlisting}
+
+Khác với Exact Greedy Split, thuật toán không duyệt toàn bộ threshold mà chỉ duyệt trên tập candidate đã được sinh trước. Code minh họa cũng xét cả hai default direction cho missing value, nên kết quả trả về dùng cùng kiểu \texttt{SparsitySplitCandidate} với Sparsity-aware Split Finding.
+
+\subsection{Phân tích độ phức tạp}
+
+Giả sử:
+
+\begin{itemize}
+    \item $d$ là số thuộc tính.
+    \item $n$ là số mẫu.
+    \item $q$ là số candidate split của mỗi thuộc tính.
+\end{itemize}
+
+Với Exact Greedy Split, số candidate gần bằng số mẫu nên:
+
+\[
+q \approx n.
+\]
+
+Do đó chi phí scan split là:
+
+\[
+O(dn).
+\]
+
+Trong Approximate Split Finding, chỉ còn $q$ candidate với:
+
+\[
+q \ll n.
+\]
+
+Trong cài đặt tối ưu, nếu các thống kê theo candidate bucket đã được xây dựng hiệu quả, chi phí đánh giá split giảm xuống:
+
+\[
+O(dq).
+\]
+
+Tỷ lệ giảm chi phí xấp xỉ:
+
+\[
+\frac{n}{q}.
+\]
+
+Ví dụ:
+
+\[
+n = 10^6,
+\qquad
+q = 1000.
+\]
+
+Khi đó số candidate cần xét giảm khoảng:
+
+\[
+1000 \text{ lần}.
+\]
+
+Đây là lý do Approximate Split Finding đặc biệt hiệu quả trên dữ liệu lớn trong các hệ thống được tối ưu tốt.
+
+Tuy nhiên, code Python trong repository dùng list comprehension để chia lại tập non-missing cho từng candidate. Vì vậy, chi phí thực tế của bản minh họa gần hơn với:
+
+\[
+O(dqn)
+\]
+
+trong trường hợp dense, cộng thêm chi phí sinh candidate. Benchmark ở phần cuối vì vậy nên được hiểu là benchmark của bản minh họa Python, không phải benchmark của thư viện XGBoost sản xuất.
+
+\subsection{Nhận xét}
+
+Approximate Split Finding có thể được xem là phiên bản mở rộng của Exact Greedy Split.
+
+\begin{itemize}
+    \item Exact Greedy Split xét gần như toàn bộ candidate split.
+    \item Approximate Split Finding chỉ xét một tập candidate đại diện.
+    \item Độ chính xác có thể giảm nhẹ.
+    \item Chi phí tính toán giảm đáng kể.
+\end{itemize}
+
+Có thể xem đây là bước chuyển quan trọng giúp XGBoost mở rộng từ dữ liệu cỡ nhỏ sang dữ liệu quy mô lớn. Tuy nhiên, hiệu quả của phương pháp phụ thuộc rất nhiều vào cách xây dựng tập candidate, và đó chính là vai trò của thuật toán Weighted Quantile Sketch.

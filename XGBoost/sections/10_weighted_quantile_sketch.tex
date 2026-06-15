@@ -1,0 +1,259 @@
+\section{Weighted Quantile Sketch}
+
+\subsection{Motivation}
+
+Approximate Split Finding phụ thuộc rất nhiều vào chất lượng của tập candidate split. Nếu các candidate được chọn tốt, thuật toán có thể tìm được split gần với Exact Greedy nhưng với chi phí thấp hơn. Ngược lại, nếu candidate được chọn kém, split tốt có thể bị bỏ qua và chất lượng cây sẽ giảm đáng kể.
+
+Một cách tự nhiên để chọn candidate là dùng quantile. Ví dụ, thay vì xét mọi giá trị của một feature, ta chọn các điểm phân vị để chia dữ liệu thành nhiều khoảng tương đối cân bằng. Tuy nhiên, trong XGBoost, các mẫu không nên được xem là quan trọng như nhau.
+
+Tại mỗi vòng boosting, mỗi mẫu $i$ có:
+
+\[
+g_i
+\]
+
+là gradient bậc nhất và:
+
+\[
+h_i
+\]
+
+là Hessian, tức đạo hàm bậc hai của hàm mất mát. Trong công thức xấp xỉ bậc hai của XGBoost, Hessian $h_i$ đóng vai trò như trọng số của mẫu. Do đó, khi chọn candidate split, XGBoost không chỉ cần quantile thông thường mà cần \textit{weighted quantile}, trong đó trọng số của mỗi mẫu là $h_i$ \cite{chen2016xgboost}.
+
+Trong code minh họa của báo cáo, phần này được thể hiện bởi hàm \texttt{propose\_candidates}. Hàm này sắp xếp các giá trị feature khác nhau, cộng Hessian theo từng giá trị, rồi chọn candidate khi weighted rank tăng ít nhất $\epsilon$. Đây là cách tính trực tiếp trên dữ liệu tại node, không phải cấu trúc sketch có đầy đủ thao tác \textit{merge} và \textit{prune}.
+
+\subsection{Quantile thông thường}
+
+Quantile là các điểm chia dữ liệu đã sắp xếp thành những phần có số lượng phần tử gần bằng nhau.
+
+Ví dụ, xét dãy giá trị:
+
+\[
+1,2,3,4,5,6,7,8.
+\]
+
+Median, tức quantile 50\%, của dãy là:
+
+\[
+4.5.
+\]
+
+Giá trị này được xác định dựa trên số lượng phần tử nằm bên trái và bên phải. Nói cách khác, quantile thông thường giả định rằng mỗi phần tử có cùng trọng số.
+
+Nếu chọn các quantile để làm candidate split, ta có thể lấy các điểm như:
+
+\[
+2,\;4,\;6.
+\]
+
+Khi đó, thay vì xét tất cả các vị trí split, thuật toán chỉ xét một số điểm đại diện.
+
+\subsection{Weighted Quantile}
+
+Trong XGBoost, mỗi mẫu có Hessian $h_i$. Vì vậy, khi xây dựng quantile, thuật toán không chỉ đếm số lượng mẫu mà còn tính đến tổng trọng số Hessian.
+
+Ví dụ:
+
+\begin{table}[htbp]
+    \centering
+    \caption{Ví dụ về weighted quantile}
+    \label{tab:weighted_quantile_example}
+    \begin{tabular}{cc}
+        \toprule
+        \textbf{Value} & \textbf{Hessian} \\
+        \midrule
+        1 & 1 \\
+        2 & 1 \\
+        3 & 100 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Nếu dùng quantile thông thường, ba giá trị $1,2,3$ có vai trò như nhau. Tuy nhiên, nếu dùng weighted quantile, giá trị $3$ có ảnh hưởng lớn hơn nhiều vì Hessian của nó bằng $100$.
+
+Tổng trọng số là:
+
+\[
+\sum_i h_i = 1 + 1 + 100 = 102.
+\]
+
+Do đó, các điểm quantile sẽ bị ảnh hưởng mạnh bởi mẫu có Hessian lớn. Điều này phù hợp với objective của XGBoost, vì những mẫu có Hessian lớn đóng vai trò quan trọng hơn trong xấp xỉ bậc hai.
+
+\subsection{Rank function có trọng số}
+
+Để mô tả weighted quantile một cách hình thức, xét feature thứ $k$. Ta có tập:
+
+\[
+D_k = \{(x_{1k}, h_1), (x_{2k}, h_2), \ldots, (x_{nk}, h_n)\}.
+\]
+
+Trong đó:
+
+\begin{itemize}
+    \item $x_{ik}$ là giá trị feature $k$ của mẫu $i$.
+    \item $h_i$ là Hessian của mẫu $i$.
+\end{itemize}
+
+XGBoost định nghĩa rank function có trọng số:
+
+\[
+r_k(z)
+=
+\frac{1}{\sum_{(x,h)\in D_k} h}
+\sum_{(x,h)\in D_k, x < z} h.
+\]
+
+Ý nghĩa của $r_k(z)$ là tỷ lệ tổng trọng số Hessian của các mẫu có giá trị feature nhỏ hơn $z$.
+
+Khác với quantile thông thường, rank ở đây không dựa trên số lượng mẫu mà dựa trên tổng trọng số:
+
+\[
+\sum_i h_i.
+\]
+
+Mục tiêu của thuật toán là tìm các candidate split:
+
+\[
+\{s_{k1}, s_{k2}, \ldots, s_{kl}\}
+\]
+
+sao cho hai candidate liên tiếp không quá xa nhau theo weighted rank:
+
+\[
+|r_k(s_{k,j}) - r_k(s_{k,j+1})| < \epsilon.
+\]
+
+Trong đó $\epsilon$ là sai số cho phép. Nếu $\epsilon$ nhỏ, số candidate nhiều hơn và kết quả gần Exact Greedy hơn. Nếu $\epsilon$ lớn, số candidate ít hơn và thuật toán nhanh hơn.
+
+\subsection{Vai trò trong XGBoost}
+
+Weighted Quantile Sketch có các vai trò chính:
+
+\begin{itemize}
+    \item Xây dựng candidate split cho Approximate Split Finding.
+    \item Giúp candidate phản ánh trọng số Hessian của từng mẫu.
+    \item Hỗ trợ xử lý dữ liệu lớn mà không cần lưu toàn bộ giá trị feature.
+    \item Giữ được thông tin quan trọng của objective bậc hai trong XGBoost.
+\end{itemize}
+
+Có thể hiểu Weighted Quantile Sketch là cầu nối giữa phần toán học và phần thuật toán:
+
+\begin{center}
+\textit{Hessian xuất hiện trong objective, nên Hessian cũng cần ảnh hưởng đến cách chọn candidate split.}
+\end{center}
+
+\subsection{Ý tưởng Sketch}
+
+Nếu dữ liệu nhỏ, ta có thể sắp xếp toàn bộ giá trị feature rồi tính weighted quantile trực tiếp. Tuy nhiên, với dữ liệu lớn hoặc dữ liệu phân tán trên nhiều máy, cách này không còn hiệu quả.
+
+Ý tưởng của sketch là chỉ lưu một bản tóm tắt của dữ liệu thay vì lưu toàn bộ $n$ điểm dữ liệu. Bản tóm tắt này vẫn cho phép truy vấn quantile gần đúng với sai số được kiểm soát.
+
+Trong paper XGBoost, một sketch đầy đủ cần hỗ trợ các thao tác quan trọng:
+
+\begin{itemize}
+    \item \textbf{Insert}: thêm dữ liệu vào sketch.
+    \item \textbf{Query}: truy vấn quantile gần đúng.
+    \item \textbf{Merge}: gộp nhiều sketch từ các phần dữ liệu khác nhau.
+    \item \textbf{Prune}: giảm kích thước sketch để tiết kiệm bộ nhớ.
+\end{itemize}
+
+Hai thao tác \textit{merge} và \textit{prune} đặc biệt quan trọng trong môi trường distributed. Mỗi máy có thể xây dựng sketch cục bộ trên phần dữ liệu của mình, sau đó các sketch được gộp lại để tạo sketch toàn cục. Repository hiện tại không triển khai phần distributed summary này; nó chỉ triển khai phiên bản trực tiếp đủ dùng cho phần Approximate Split Finding minh họa.
+
+\subsection{Pseudocode}
+
+\begin{lstlisting}[style=pseudocode, caption={Weighted Quantile Sketch}, label={lst:weighted_quantile_sketch}]
+BuildWeightedQuantileSketch(D, epsilon):
+    sketch = empty summary
+
+    for each sample i in D:
+        value = x_i
+        weight = h_i
+        sketch.insert(value, weight)
+
+    sketch.prune(epsilon)
+
+    return sketch
+
+GenerateCandidates(sketch):
+    candidates = []
+
+    for rank in {epsilon, 2*epsilon, 3*epsilon, ...}:
+        s = sketch.query(rank)
+        candidates.append(s)
+
+    return candidates
+\end{lstlisting}
+
+Mã giả trên chỉ mô tả trực giác chính. Trong XGBoost, cấu trúc sketch cần được thiết kế cẩn thận để đảm bảo sai số của quantile gần đúng và hỗ trợ gộp dữ liệu hiệu quả.
+
+Nếu viết gần hơn với code trong repository, quy trình là:
+
+\begin{lstlisting}[style=pseudocode, caption={Sinh candidate trực tiếp trong code minh họa}, label={lst:direct_weighted_candidates}]
+ProposeCandidates(values, hessians, indices, epsilon):
+    keep only non-missing values
+    aggregate Hessian by feature value
+    sort unique feature values
+
+    candidates = [smallest value]
+    last_rank = 0
+
+    for each unique value in increasing order:
+        rank = cumulative_hessian / total_hessian
+        if rank - last_rank >= epsilon:
+            candidates.append(value)
+            last_rank = rank
+
+    ensure largest value is included
+    return candidates
+\end{lstlisting}
+
+\subsection{Độ phức tạp}
+
+Gọi $\epsilon$ là sai số cho phép của sketch. Khi $\epsilon$ càng nhỏ, số lượng candidate càng nhiều. Số candidate thường tỷ lệ với:
+
+\[
+O\left(\frac{1}{\epsilon}\right).
+\]
+
+Theo paper XGBoost, cấu trúc Weighted Quantile Sketch hỗ trợ xây dựng summary với kích thước và chi phí phụ thuộc vào $\epsilon$, thường được biểu diễn ở mức trực giác là:
+
+\[
+O\left(\frac{1}{\epsilon}\log n\right),
+\]
+
+trong đó $n$ là số mẫu.
+
+Với code minh họa, vì candidate được sinh bằng cách aggregate và sort trực tiếp các giá trị feature tại node, chi phí phụ thuộc vào số giá trị non-missing và số giá trị khác nhau của feature. Do đó, phần benchmark không nên được đọc như phép đo của cấu trúc sketch tối ưu trong paper.
+
+Về mặt sử dụng trong Approximate Split Finding, nếu mỗi feature chỉ giữ lại $q$ candidate, chi phí đánh giá split giảm từ:
+
+\[
+O(dn)
+\]
+
+xuống gần:
+
+\[
+O(dq),
+\]
+
+với:
+
+\[
+q \ll n.
+\]
+
+\subsection{Nhận xét}
+
+Weighted Quantile Sketch là thành phần quan trọng giúp Approximate Split Finding duy trì chất lượng split trong khi vẫn đạt hiệu năng cao.
+
+Có thể tóm tắt vai trò của kỹ thuật này như sau:
+
+\begin{itemize}
+    \item Approximate Split Finding cần chọn candidate split tốt.
+    \item Quantile thông thường chưa đủ vì các mẫu trong XGBoost có trọng số khác nhau.
+    \item Hessian $h_i$ được dùng làm trọng số vì nó xuất hiện trong objective bậc hai.
+    \item Sketch giúp tính weighted quantile gần đúng mà không cần lưu toàn bộ dữ liệu.
+\end{itemize}
+
+Nhờ đó, XGBoost có thể giảm số lượng split candidate cần xét nhưng vẫn giữ được nhiều thông tin quan trọng của hàm mục tiêu.

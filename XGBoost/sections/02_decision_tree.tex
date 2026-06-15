@@ -1,0 +1,142 @@
+\section{Decision Tree}
+
+\subsection{Khái niệm}
+
+Cây quyết định là một mô hình học máy có cấu trúc dạng cây, trong đó quá trình dự đoán được thực hiện thông qua một chuỗi các phép kiểm tra trên đặc trưng đầu vào. Mỗi nút trong biểu diễn một điều kiện phân tách, mỗi cạnh tương ứng với kết quả của điều kiện đó, và mỗi nút lá chứa dự đoán cuối cùng của mô hình \cite{breiman1984classification}.
+
+Với bài toán phân loại, nút lá thường chứa nhãn lớp hoặc phân phối xác suất trên các lớp. Với bài toán hồi quy, nút lá thường chứa một giá trị số, chẳng hạn trung bình của các giá trị mục tiêu trong node đó. Nhờ cấu trúc phân nhánh rõ ràng, cây quyết định có ưu điểm là dễ diễn giải và có thể mô hình hóa các quan hệ phi tuyến giữa đặc trưng và nhãn.
+
+Một cây quyết định gồm các thành phần chính:
+
+\begin{itemize}
+    \item \textbf{Root node}: nút gốc, chứa toàn bộ tập dữ liệu ban đầu.
+    \item \textbf{Internal node}: nút trong, chứa một điều kiện phân tách.
+    \item \textbf{Split}: phép chia một tập mẫu thành các tập con dựa trên một đặc trưng và một ngưỡng.
+    \item \textbf{Threshold}: ngưỡng dùng để quyết định mẫu đi sang nhánh trái hay nhánh phải.
+    \item \textbf{Leaf node}: nút lá, nơi mô hình đưa ra dự đoán.
+\end{itemize}
+
+Ví dụ, một node có thể có điều kiện:
+
+\[
+x_j \leq s,
+\]
+
+trong đó $x_j$ là giá trị của đặc trưng thứ $j$, còn $s$ là threshold. Khi đó, một mẫu dữ liệu sẽ được đưa sang nhánh trái nếu $x_j \leq s$, và sang nhánh phải nếu $x_j > s$. Quy ước này cũng là quy ước được dùng trong phần code minh họa của báo cáo.
+
+\subsection{Minh họa cấu trúc cây}
+
+Một cây quyết định nhị phân đơn giản có thể được minh họa như sau:
+
+\begin{figure}[h]
+    \centering
+    \fbox{
+    \begin{minipage}{0.75\linewidth}
+    \centering
+    \vspace{0.2cm}
+    Root: $x_1 < 5$?\\[0.2cm]
+    $\swarrow$ \hspace{3cm} $\searrow$\\
+    Leaf: class A \hspace{1.5cm} Internal: $x_2 < 3$?\\
+    \hspace{4.2cm} $\swarrow$ \hspace{1.5cm} $\searrow$\\
+    \hspace{3.2cm} Leaf: class B \hspace{0.5cm} Leaf: class C
+    \vspace{0.2cm}
+    \end{minipage}
+    }
+    \caption{Minh họa một cây quyết định nhị phân đơn giản.}
+    \label{fig:decision_tree_example}
+\end{figure}
+
+Trong ví dụ trên, mỗi sample bắt đầu từ root node, đi qua một số điều kiện phân tách, sau đó kết thúc tại một leaf node. Dự đoán của mô hình chính là giá trị được lưu tại leaf node đó.
+
+\subsection{Tiêu chí phân tách}
+
+Mục tiêu của quá trình xây dựng cây là chọn các split sao cho các mẫu trong cùng một nút lá càng đồng nhất càng tốt. Với bài toán phân loại, một node được xem là tốt nếu phần lớn mẫu trong node thuộc cùng một lớp. Với bài toán hồi quy, một node được xem là tốt nếu các giá trị mục tiêu trong node ít biến thiên.
+
+Một số tiêu chí phân tách phổ biến gồm:
+
+\begin{itemize}
+    \item \textbf{Gini impurity}: thường dùng trong bài toán phân loại.
+    \item \textbf{Entropy và Information Gain}: đo mức độ giảm bất định sau khi phân tách.
+    \item \textbf{Mean Squared Error}: thường dùng trong bài toán hồi quy.
+\end{itemize}
+
+Với bài toán phân loại, Gini impurity của một node được định nghĩa là:
+
+\[
+Gini = 1 - \sum_{c=1}^{C} p_c^2,
+\]
+
+trong đó $p_c$ là tỷ lệ mẫu thuộc lớp $c$ trong node, và $C$ là số lớp.
+
+Với bài toán hồi quy, một tiêu chí phổ biến là tổng sai số bình phương trong các node con:
+
+\[
+MSE = \frac{1}{n}\sum_{i=1}^{n}(y_i - \bar{y})^2,
+\]
+
+trong đó $\bar{y}$ là giá trị trung bình của các nhãn trong node.
+
+Trong XGBoost, tiêu chí chọn split không trực tiếp dùng Gini hay MSE như cây quyết định truyền thống. Thay vào đó, XGBoost sử dụng một công thức gain được suy ra từ hàm mục tiêu có regularization và khai triển Taylor bậc hai \cite{chen2016xgboost}. Điều này giúp tiêu chí phân tách của XGBoost gắn trực tiếp với mục tiêu tối ưu của mô hình.
+
+\subsection{Mã giả xây dựng cây quyết định}
+
+Quá trình xây dựng cây quyết định thường được thực hiện theo cách đệ quy. Tại mỗi node, thuật toán tìm split tốt nhất, chia dữ liệu thành hai tập con, sau đó tiếp tục xây dựng cây trên từng tập con.
+
+\begin{lstlisting}[style=pseudocode, caption={Mã giả xây dựng cây quyết định}, label={lst:decision_tree}]
+BuildTree(D, depth):
+    if stopping_condition(D, depth):
+        return Leaf(prediction)
+
+    best_split = None
+    best_score = -infinity
+
+    for each feature j:
+        for each threshold s:
+            split D into D_left and D_right
+            score = evaluate_split(D_left, D_right)
+
+            if score > best_score:
+                best_score = score
+                best_split = (j, s)
+
+    split D using best_split into D_left and D_right
+    create internal node using best_split
+    left_child = BuildTree(D_left, depth + 1)
+    right_child = BuildTree(D_right, depth + 1)
+
+    return node
+\end{lstlisting}
+
+Điểm quan trọng trong thuật toán trên là vòng lặp tìm \texttt{best\_split}. Đây chính là phần tốn kém nhất, vì thuật toán phải xét nhiều đặc trưng và nhiều threshold khác nhau.
+
+\subsection{Độ phức tạp}
+
+Giả sử tại một node có $n$ mẫu và $d$ đặc trưng. Để tìm split tốt nhất, thuật toán cần xét các threshold trên từng đặc trưng.
+
+Nếu mỗi đặc trưng là liên tục, một cách làm phổ biến là sắp xếp các mẫu theo giá trị của đặc trưng đó. Chi phí sắp xếp một đặc trưng là:
+
+\[
+O(n \log n).
+\]
+
+Với $d$ đặc trưng, chi phí sắp xếp là:
+
+\[
+O(dn \log n).
+\]
+
+Sau khi sắp xếp, thuật toán có thể quét tuyến tính để đánh giá các split candidate, với chi phí:
+
+\[
+O(dn).
+\]
+
+Vì vậy, chi phí tại một node có thể được ước lượng là:
+
+\[
+O(dn \log n + dn) = O(dn \log n).
+\]
+
+Nếu cây có độ sâu tối đa là $h$, việc tìm split sẽ được lặp lại ở nhiều node. Trong thực tế, tổng chi phí phụ thuộc vào cách dữ liệu được chia qua các node. Tuy nhiên, có thể thấy rằng thao tác tìm split là thành phần chi phối chi phí xây dựng cây.
+
+Đây cũng là lý do các phần sau của báo cáo tập trung vào các kỹ thuật tối ưu split finding trong XGBoost.

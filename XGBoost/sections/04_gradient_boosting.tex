@@ -1,0 +1,145 @@
+\section{Gradient Boosting}
+
+\subsection{Nguyên lý}
+
+Gradient Boosting là một phương pháp học tổ hợp thuộc nhóm Boosting. Mô hình được xây dựng bằng cách cộng dồn nhiều mô hình yếu, thường là các cây quyết định nông. Ý tưởng này được Friedman hệ thống hóa dưới góc nhìn tối ưu hàm mất mát bằng gradient \cite{friedman2001gradient}.
+
+Trực giác chính của Gradient Boosting là:
+
+\begin{center}
+\textit{Mô hình sau được huấn luyện để cải thiện phần lỗi mà mô hình trước chưa xử lý tốt.}
+\end{center}
+
+Gọi $F_t(x)$ là mô hình sau $t$ vòng lặp. Gradient Boosting xây dựng mô hình theo dạng cộng dồn:
+
+\[
+F_t(x) = F_{t-1}(x) + \eta f_t(x),
+\]
+
+trong đó:
+
+\begin{itemize}
+    \item $F_{t-1}(x)$ là mô hình hiện tại trước khi thêm cây mới.
+    \item $f_t(x)$ là mô hình yếu được thêm vào ở vòng lặp thứ $t$.
+    \item $\eta$ là learning rate, còn gọi là shrinkage.
+\end{itemize}
+
+Learning rate $\eta$ giúp giảm ảnh hưởng của từng mô hình yếu riêng lẻ. Nhờ đó, quá trình học diễn ra chậm hơn nhưng ổn định hơn, đồng thời có thể giảm nguy cơ overfitting.
+
+\subsection{Intuition trước công thức}
+
+Giả sử mô hình hiện tại dự đoán chưa tốt. Thay vì học lại toàn bộ mô hình từ đầu, Gradient Boosting giữ lại mô hình cũ và chỉ học thêm một cây mới để cải thiện dự đoán.
+
+Có thể hình dung quá trình này như sau:
+
+\begin{lstlisting}[style=pseudocode, caption={Trực giác quá trình Boosting}, label={lst:boosting_intuition}]
+Initial prediction: still many errors
+Tree 1: fix part of the errors
+Tree 2: fix the remaining errors
+Tree 3: continue fixing errors
+...
+Final model: combine many small error corrections
+\end{lstlisting}
+
+Trong trường hợp hàm mất mát là bình phương sai số:
+
+\[
+l(y, \hat{y}) = \frac{1}{2}(y - \hat{y})^2,
+\]
+
+phần lỗi còn lại chính là residual:
+
+\[
+r_i = y_i - \hat{y}_i.
+\]
+
+Khi đó, cây tiếp theo có thể được huấn luyện để dự đoán residual. Tuy nhiên, với các hàm mất mát tổng quát hơn, residual không còn là cách mô tả đầy đủ nhất. Gradient Boosting sử dụng gradient của hàm mất mát để xác định hướng làm giảm lỗi.
+
+\subsection{Hàm mất mát và hướng gradient}
+
+Giả sử tập dữ liệu gồm $n$ mẫu:
+
+\[
+D = \{(x_i, y_i)\}_{i=1}^{n}.
+\]
+
+Mục tiêu của mô hình là tối thiểu hóa tổng loss:
+
+\[
+\mathcal{L} = \sum_{i=1}^{n} l(y_i, F(x_i)).
+\]
+
+Tại vòng lặp thứ $t$, mô hình hiện tại là $F_{t-1}(x)$. Ta muốn thêm một cây mới $f_t(x)$ sao cho loss giảm nhiều nhất:
+
+\[
+\mathcal{L}^{(t)}
+=
+\sum_{i=1}^{n}
+l(y_i, F_{t-1}(x_i) + f_t(x_i)).
+\]
+
+Gradient Boosting xem việc thêm cây mới như một bước cập nhật trong không gian hàm. Thay vì cập nhật trực tiếp một vector tham số như gradient descent thông thường, mô hình cập nhật bằng cách thêm một hàm mới.
+
+Gradient tại mẫu $i$ được định nghĩa là:
+
+\[
+g_i =
+\frac{\partial l(y_i, \hat{y}_i)}
+{\partial \hat{y}_i}.
+\]
+
+Hướng làm giảm loss là hướng ngược gradient:
+
+\[
+-g_i.
+\]
+
+Vì vậy, cây mới $f_t$ được học để xấp xỉ hướng ngược gradient của loss tại các điểm dữ liệu. Nói cách khác, thay vì dự đoán trực tiếp nhãn $y_i$, cây mới học tín hiệu ``nên điều chỉnh dự đoán hiện tại theo hướng nào''.
+
+\subsection{Quy trình huấn luyện}
+
+Quy trình tổng quát của Gradient Boosting có thể mô tả như sau:
+
+\begin{lstlisting}[style=pseudocode, caption={Quy trình huấn luyện Gradient Boosting}, label={lst:gradient_boosting_training}]
+Input: training data D, number of iterations K, learning rate eta
+
+Initialize F_0(x)
+
+for t = 1 to K:
+    compute gradients for all training samples
+    fit a regression tree f_t to the negative gradients
+    update model:
+        F_t(x) = F_{t-1}(x) + eta * f_t(x)
+
+return F_K(x)
+\end{lstlisting}
+
+Với hàm mất mát bình phương, negative gradient tương ứng với residual. Với các hàm mất mát khác như logistic loss, negative gradient đóng vai trò là tín hiệu điều chỉnh dự đoán.
+
+\subsection{Độ phức tạp tổng quát}
+
+Chi phí huấn luyện Gradient Boosting phụ thuộc chủ yếu vào số vòng boosting và chi phí huấn luyện từng cây. Gọi:
+
+\begin{itemize}
+    \item $K$ là số vòng boosting, tương ứng với số cây.
+    \item $T_{\text{tree}}$ là chi phí huấn luyện một cây.
+\end{itemize}
+
+Khi đó, chi phí tổng quát có thể viết là:
+
+\[
+O(K \cdot T_{\text{tree}}).
+\]
+
+Nếu mỗi cây được xây dựng bằng cách tìm split trên $n$ mẫu và $d$ đặc trưng, thì $T_{\text{tree}}$ phụ thuộc mạnh vào chi phí split finding. Đây là lý do các hệ thống Gradient Boosted Trees hiệu quả cần tối ưu quá trình tìm split.
+
+\subsection{Liên hệ với XGBoost}
+
+Gradient Boosting truyền thống thường sử dụng gradient bậc nhất để quyết định hướng cập nhật. XGBoost mở rộng ý tưởng này theo hai hướng quan trọng:
+
+\begin{itemize}
+    \item Sử dụng cả gradient bậc nhất và đạo hàm bậc hai, tức Hessian, để xấp xỉ hàm mục tiêu tốt hơn.
+    \item Bổ sung regularization trực tiếp vào hàm mục tiêu để kiểm soát độ phức tạp của cây.
+\end{itemize}
+
+Vì vậy, XGBoost có thể được xem là một phiên bản Gradient Boosting được tối ưu cả về mặt toán học lẫn hệ thống \cite{chen2016xgboost}. Phần tiếp theo sẽ trình bày tổng quan các cải tiến chính của XGBoost trước khi đi vào công thức cụ thể.

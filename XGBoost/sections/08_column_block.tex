@@ -1,0 +1,234 @@
+\section{Column Block Structure}
+
+\subsection{Motivation}
+
+Trong thuật toán Exact Greedy Split, để tìm ngưỡng chia tốt nhất cho một thuộc tính, các giá trị của thuộc tính đó cần được xét theo thứ tự tăng dần. Nếu tại mỗi node thuật toán phải sắp xếp lại dữ liệu theo từng feature, chi phí tính toán sẽ rất lớn, đặc biệt khi số mẫu và số feature tăng cao.
+
+Giả sử tập dữ liệu có $n$ mẫu và $d$ thuộc tính. Chi phí sắp xếp một thuộc tính là:
+
+\[
+O(n\log n).
+\]
+
+Do đó, chi phí sắp xếp toàn bộ $d$ thuộc tính là:
+
+\[
+O(dn\log n).
+\]
+
+Khi quá trình boosting xây dựng nhiều cây, và mỗi cây lại có nhiều node, chi phí sắp xếp lặp lại có thể trở thành một nút thắt lớn. Để giảm chi phí này, XGBoost đề xuất cơ chế \textit{Column Block Structure}, trong đó dữ liệu được lưu theo cột đã sắp xếp và có thể tái sử dụng trong quá trình huấn luyện \cite{chen2016xgboost}.
+
+\subsection{Ý tưởng của Column Block}
+
+Ý tưởng chính của Column Block là:
+
+\begin{center}
+\textit{Sort dữ liệu theo từng feature một lần, sau đó tái sử dụng thứ tự đã sort khi tìm split.}
+\end{center}
+
+Thay vì sắp xếp lại dữ liệu mỗi khi tìm split, XGBoost thực hiện:
+
+\begin{itemize}
+    \item Sắp xếp từng cột theo giá trị feature.
+    \item Lưu kết quả dưới dạng block.
+    \item Khi tìm split, chỉ cần scan tuần tự trên các block đã sắp xếp.
+\end{itemize}
+
+Trong phần code minh họa, \texttt{ColumnBlock} lưu riêng hai mảng cho mỗi feature: một mảng giá trị đã sắp xếp và một mảng row id tương ứng. Các giá trị \texttt{None} không được lưu trong block, vì chúng được xử lý bằng default direction giống phần Sparsity-aware Split Finding.
+
+Ví dụ dữ liệu ban đầu:
+
+\begin{table}[htbp]
+    \centering
+    \caption{Dữ liệu ban đầu của feature Age}
+    \label{tab:age_original}
+    \begin{tabular}{cc}
+        \toprule
+        \textbf{Row} & \textbf{Age} \\
+        \midrule
+        1 & 23 \\
+        2 & 18 \\
+        3 & 35 \\
+        4 & 20 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Sau khi sắp xếp theo giá trị thuộc tính:
+
+\begin{table}[htbp]
+    \centering
+    \caption{Feature Age sau khi được lưu theo thứ tự tăng dần}
+    \label{tab:age_sorted}
+    \begin{tabular}{cc}
+        \toprule
+        \textbf{Value} & \textbf{Row ID} \\
+        \midrule
+        18 & 2 \\
+        20 & 4 \\
+        23 & 1 \\
+        35 & 3 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Thông tin này được lưu lại và dùng lại trong các bước tìm split về sau. Khi cần xét feature Age, thuật toán chỉ cần scan theo thứ tự trong Bảng~\ref{tab:age_sorted}.
+
+\subsection{Cấu trúc dữ liệu}
+
+Trong Column Block Structure, mỗi feature được lưu dưới dạng một danh sách các cặp:
+
+\[
+(\text{value}, \text{row\_id})
+\]
+
+theo thứ tự tăng dần của \textit{value}.
+
+Ví dụ, một block của feature $j$ có dạng:
+
+\[
+(v_1, id_1), (v_2, id_2), (v_3, id_3), \ldots
+\]
+
+trong đó:
+
+\begin{itemize}
+    \item $v_k$ là giá trị của feature.
+    \item $id_k$ là chỉ số dòng tương ứng trong tập dữ liệu.
+\end{itemize}
+
+Việc lưu thêm \textit{row\_id} là cần thiết vì khi scan theo feature, thuật toán vẫn cần truy cập gradient $g_i$ và Hessian $h_i$ của sample tương ứng. Nói cách khác, block lưu thứ tự theo feature, còn gradient và Hessian được lấy thông qua chỉ số dòng.
+
+\subsection{Tìm split bằng Column Block}
+
+Sau khi dữ liệu đã được lưu dưới dạng column block, việc tìm split diễn ra như sau:
+
+\begin{enumerate}
+    \item Chọn một feature.
+    \item Scan các giá trị của feature đó theo thứ tự đã sắp xếp.
+    \item Cập nhật dần $G_L$ và $H_L$ khi một sample được chuyển sang nhánh trái.
+    \item Tính $G_R = G - G_L$ và $H_R = H - H_L$.
+    \item Tính gain tại mỗi vị trí candidate.
+\end{enumerate}
+
+Điểm quan trọng là bước sắp xếp không cần lặp lại ở mỗi node. Thứ tự đã sort được tái sử dụng, còn việc một sample thuộc node nào sẽ được kiểm tra thông qua thông tin node assignment hiện tại.
+
+\subsection{Pseudocode}
+
+\begin{lstlisting}[style=pseudocode, caption={Xây dựng Column Block}, label={lst:build_column_block}]
+BuildColumnBlock(D):
+    blocks = []
+
+    for each feature j:
+        column = []
+
+        for each row i in D:
+            if x_ij is not missing:
+                column.append((x_ij, i))
+
+        sort column by x_ij
+        blocks.append(column)
+
+    return blocks
+\end{lstlisting}
+
+Quá trình tìm split sau khi đã có block có thể mô tả như sau:
+
+\begin{lstlisting}[style=pseudocode, caption={Scan split candidates trên Column Block}, label={lst:scan_column_block}]
+FindSplitWithColumnBlock(blocks, node):
+    best_gain = 0
+    best_split = None
+
+    for each feature block in blocks:
+        G_L = 0
+        H_L = 0
+
+        for (value, row_id) in feature block in increasing order:
+            if row_id not in current node:
+                continue
+
+            G_L = G_L + g_row_id
+            H_L = H_L + h_row_id
+
+            G_R = G - G_L
+            H_R = H - H_L
+
+            gain = compute_gain(G_L, H_L, G_R, H_R)
+
+            if gain > best_gain:
+                best_gain = gain
+                best_split = (feature, threshold, default_direction=right)
+
+        repeat the scan in decreasing order
+        to evaluate default_direction=left
+
+    return best_split, best_gain
+\end{lstlisting}
+
+Mã Python trong repository thực hiện thêm một bước scan theo chiều giảm dần để xét trường hợp missing values đi sang trái. Do cấu trúc hiện tại chỉ lưu thứ tự tăng dần, code phải tạo danh sách giảm dần tại thời điểm scan. Vì vậy, đây là bản minh họa đúng ý tưởng column block, nhưng chưa phải một cài đặt tối ưu hoàn toàn như hệ thống XGBoost sản xuất.
+
+\subsection{Phân tích độ phức tạp}
+
+\textbf{Bước tiền xử lý.} Với $d$ thuộc tính, mỗi thuộc tính có $n$ giá trị. Chi phí sắp xếp ban đầu là:
+
+\[
+O(dn\log n).
+\]
+
+Bước này chỉ thực hiện một lần trước quá trình xây dựng cây.
+
+\textbf{Đánh giá split.} Về mặt ý tưởng, sau khi có block, thuật toán chỉ cần scan tuyến tính qua các giá trị đã sắp xếp. Với $d$ thuộc tính và $n$ mẫu, chi phí scan là:
+
+\[
+O(dn).
+\]
+
+\textbf{Khi xây dựng nhiều cây.} Gọi:
+
+\begin{itemize}
+    \item $K$ là số cây.
+    \item $h$ là độ sâu tối đa của mỗi cây.
+\end{itemize}
+
+Nếu không dùng Column Block và phải sort lặp lại, chi phí có thể được ước lượng là:
+
+\[
+O(Khdn\log n).
+\]
+
+Nếu dùng Column Block, chi phí gồm:
+
+\[
+O(dn\log n)
+\]
+
+cho bước tiền xử lý ban đầu, và:
+
+\[
+O(Khdn)
+\]
+
+cho quá trình scan split trong các cây.
+
+Do đó, tổng chi phí trở thành:
+
+\[
+O(dn\log n + Khdn).
+\]
+
+\subsection{Nhận xét}
+
+Column Block Structure không loại bỏ hoàn toàn chi phí scan split, nhưng loại bỏ việc phải sắp xếp dữ liệu lặp lại nhiều lần. Đây là cải tiến quan trọng vì sorting thường đắt hơn scanning.
+
+Trong benchmark Python ở phần Code Demonstration, bản \texttt{ColumnBlock} chưa nhanh hơn Exact Greedy trên dữ liệu nhỏ. Nguyên nhân là chi phí lọc active row, cấp phát danh sách tạm và scan giảm dần trong Python lớn hơn lợi ích tránh sort ở quy mô thử nghiệm. Kết quả này không phủ định ý tưởng Column Block trong XGBoost; nó chỉ cho thấy bản minh họa hiện tại ưu tiên tính rõ ràng hơn tối ưu hệ thống.
+
+Có thể tóm tắt vai trò của Column Block như sau:
+
+\begin{itemize}
+    \item Exact Greedy Split cần dữ liệu theo thứ tự tăng dần để tìm threshold.
+    \item Column Block sắp xếp dữ liệu theo từng feature một lần duy nhất.
+    \item Trong quá trình huấn luyện, thuật toán chỉ scan trên block đã sort.
+    \item Nhờ đó, chi phí từ $O(Khdn\log n)$ được giảm còn $O(dn\log n + Khdn)$.
+\end{itemize}
+
+Đây là nền tảng để XGBoost tăng tốc quá trình tìm split, đặc biệt trong trường hợp dữ liệu lớn và số vòng boosting cao.
